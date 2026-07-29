@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LoopRep — Spaced-Repetition Video Segment Trainer</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#171b2e; --panel2:#1e2440; --line:#2a3154;
+    --text:#e9ecf6; --muted:#98a0c0; --accent:#6c8cff; --accent2:#8b5cf6;
+    --again:#ef4444; --hard:#f59e0b; --good:#22c55e; --easy:#38bdf8;
+    --a:#f472b6; --b:#34d399; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 20% -10%,#1b2145 0%,transparent 60%),var(--bg);
+    color:var(--text); min-height:100vh; padding:24px;
+  }
+  h1{font-size:22px;margin:0 0 4px;letter-spacing:.3px}
+  h1 span{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:18px}
+  .wrap{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);gap:18px}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 12px;display:flex;justify-content:space-between;align-items:center}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input,select,button{font:inherit}
+  input[type=text],input[type=number],select{
+    background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    padding:10px 12px;border-radius:10px;outline:none
+  }
+  input[type=text]{flex:1;min-width:220px}
+  input[type=number]{width:100px}
+  select{cursor:pointer}
+  input:focus,select:focus{border-color:var(--accent)}
+  .btn{
+    background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    padding:10px 14px;border-radius:10px;cursor:pointer;transition:.15s;font-weight:600
+  }
+  .btn:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent2));border:none}
+  .btn.sm{padding:7px 11px;font-size:13px}
+  .btn.ghost{background:transparent}
+  .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+  #player-box{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden}
+  #player{width:100%;height:100%}
+  /* progress + A/B track under player */
+  .track{position:relative;height:10px;margin-top:10px;background:var(--panel2);border:1px solid var(--line);border-radius:99px;overflow:hidden}
+  .track>.seg{position:absolute;top:0;bottom:0;background:linear-gradient(90deg,var(--accent),var(--accent2));opacity:.55}
+  .track>.play{position:absolute;top:-3px;width:3px;height:16px;background:#fff;border-radius:2px}
+  .track>.mk{position:absolute;top:-4px;width:2px;height:18px}
+  .track>.mkA{background:var(--a)} .track>.mkB{background:var(--b)}
+  .track>.abfill{position:absolute;top:0;bottom:0;background:rgba(244,114,182,.25)}
+  .seg-banner{
+    display:flex;justify-content:space-between;align-items:center;gap:12px;
+    margin-top:12px;padding:12px 14px;background:var(--panel2);border-radius:12px;border:1px solid var(--line)
+  }
+  .seg-banner .big{font-size:20px;font-weight:700}
+  .seg-banner .meta{color:var(--muted);font-size:12px}
+  .grades{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+  .grade{padding:14px 8px;border-radius:12px;border:none;cursor:pointer;color:#0b0e18;font-weight:700;text-align:center;transition:.15s}
+  .grade small{display:block;font-weight:600;opacity:.8;font-size:11px;margin-top:3px}
+  .grade:hover{transform:translateY(-2px)}
+  .grade.again{background:var(--again);color:#fff}
+  .grade.hard{background:var(--hard)}
+  .grade.good{background:var(--good)}
+  .grade.easy{background:var(--easy)}
+  .grades button:disabled{opacity:.35;cursor:not-allowed;transform:none}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+  .toolbar .lab{color:var(--muted);font-size:12px}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:99px;padding:4px 10px;font-size:12px;color:var(--muted)}
+  .chip b{color:var(--text)}
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+  .stat{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+  .stat .n{font-size:20px;font-weight:700}
+  .stat .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .bar{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden;margin:6px 0 14px}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--good),var(--easy));width:0%;transition:width .3s}
+  .queue{max-height:320px;overflow:auto;display:flex;flex-direction:column;gap:6px}
+  .qitem{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);font-size:13px}
+  .qitem.cur{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none;background:var(--muted)}
+  .qitem .id{font-weight:700;min-width:34px}
+  .qitem .rng{color:var(--muted);font-size:11px}
+  .qitem .tags{margin-left:auto;display:flex;gap:6px;font-size:11px;color:var(--muted)}
+  .pill{background:#0b0e18;border:1px solid var(--line);padding:2px 6px;border-radius:99px}
+  .opts{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:12px;color:var(--muted);font-size:13px}
+  .opts label{display:flex;gap:6px;align-items:center;cursor:pointer}
+  .hint{color:var(--muted);font-size:12px;line-height:1.5;margin-top:10px}
+  .mastery{margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);font-size:12px;color:var(--muted)}
+  .mastery b{color:var(--text)}
+  .mbar{height:6px;background:#0b0e18;border-radius:99px;overflow:hidden;margin-top:6px}
+  .mbar>i{display:block;height:100%;background:linear-gradient(90deg,var(--hard),var(--good));width:0%;transition:width .3s}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:10px;opacity:0;transition:.3s;pointer-events:none;z-index:9}
+  .toast.show{opacity:1}
+  code{background:#0b0e18;padding:1px 5px;border-radius:5px;color:#c7d2fe}
+  details{margin-top:12px}
+  summary{cursor:pointer;color:var(--accent);font-size:13px}
+  .save-dot{font-size:11px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0}
+</style>
+</head>
+<body>
+<h1><span>LoopRep</span> — Spaced-Repetition Video Segment Trainer</h1>
+<div class="sub">Chop any YouTube video into fixed-length segments and drill them with an Anki-style (SM-2) scheduler. Progress persists across reloads; when comprehension trends high the session auto-resets for endless drilling.</div>
+
+<div class="wrap">
+  <!-- LEFT: player + controls -->
+  <div style="display:flex;flex-direction:column;gap:18px">
+    <div class="card">
+      <h2>1 · Load video &amp; slice</h2>
+      <div class="row">
+        <input id="url" type="text" placeholder="Paste a YouTube URL or ID (e.g. https://youtu.be/dQw4w9WgXcQ)" />
+        <label class="hint" style="margin:0">Segment&nbsp;length</label>
+        <input id="seg" type="number" min="2" max="600" step="1" value="15" /> <span class="hint">sec</span>
+        <button id="loadBtn" class="btn primary">Load &amp; Slice</button>
+      </div>
+      <div class="opts">
+        <label><input id="cumulative" type="checkbox" /> Cumulative playback</label>
+        <label><input id="autoloop" type="checkbox" checked /> Loop until graded</label>
+        <label><input id="autoreset" type="checkbox" checked /> Infinite auto-reset on mastery</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2 · Review</h2>
+      <div id="player-box"><div id="player"></div></div>
+
+      <!-- scrub + A/B track -->
+      <div class="track" id="track">
+        <div class="seg" id="tSeg"></div>
+        <div class="abfill" id="tAB" style="display:none"></div>
+        <div class="mk mkA" id="tA" style="display:none"></div>
+        <div class="mk mkB" id="tB" style="display:none"></div>
+        <div class="play" id="tPlay"></div>
+      </div>
+
+      <!-- A/B + speed toolbar -->
+      <div class="toolbar">
+        <span class="lab">A/B loop</span>
+        <button id="setA" class="btn sm" disabled>Set A</button>
+        <button id="setB" class="btn sm" disabled>Set B</button>
+        <button id="clrAB" class="btn sm ghost" disabled>Clear</button>
+        <label class="opts" style="margin:0"><input id="abOn" type="checkbox" disabled> use A/B</label>
+        <span class="chip" id="abChip">A — · B —</span>
+        <span class="lab" style="margin-left:auto">Speed</span>
+        <select id="speed">
+          <option>0.25</option><option>0.5</option><option>0.75</option>
+          <option selected>1</option><option>1.25</option><option>1.5</option>
+          <option>1.75</option><option>2</option>
+        </select>
+      </div>
+
+      <div class="seg-banner">
+        <div>
+          <div class="big" id="curLabel">— no segment —</div>
+          <div class="meta" id="curMeta">Load a video to begin.</div>
+        </div>
+        <div class="row">
+          <button id="replayBtn" class="btn" disabled>↻ Replay</button>
+          <button id="pauseBtn" class="btn" disabled>⏸ Pause</button>
+        </div>
+      </div>
+
+      <div class="grades">
+        <button class="grade again" data-q="again" disabled>Again<small>forgot</small></button>
+        <button class="grade hard" data-q="hard" disabled>Hard<small>tough</small></button>
+        <button class="grade good" data-q="good" disabled>Good<small>ok</small></button>
+        <button class="grade easy" data-q="easy" disabled>Easy<small>trivial</small></button>
+      </div>
+      <div class="hint">Keys: <code>Space</code> replay · <code>1-4</code> grade · <code>a</code>/<code>b</code> set A/B · <code>x</code> clear A/B · <code>[</code>/<code>]</code> speed</div>
+
+      <div class="mastery">
+        <div>Mastery signal: <b id="mLabel">—</b> <span id="mDetail"></span></div>
+        <div class="mbar"><i id="mBar"></i></div>
+      </div>
+
+      <details>
+        <summary>How scheduling &amp; infinite reset work</summary>
+        <div class="hint">
+          Each segment is a <b>card</b>. Grading runs <b>SM-2 (Anki)</b>, updating <i>ease factor</i>, <i>reps</i> and
+          <i>interval</i>; intervals are mapped to <b>steps ahead in the queue</b>, so <code>Again/Hard</code> resurface
+          soon and <code>Good/Easy</code> get pushed back until they graduate. State is saved to <b>IndexedDB</b> keyed by
+          video + segment length, so a reload resumes exactly where you left off.
+          <br><br>
+          The <b>mastery signal</b> blends learned fraction, mean ease factor, and recent retention. When it crosses the
+          threshold (comprehension high), progress <b>auto-resets</b> — SRS state clears, the round counter increments,
+          and drilling continues <b>infinitely</b>. Uncheck <i>Infinite auto-reset</i> to stop at completion instead.
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- RIGHT: stats + queue -->
+  <div style="display:flex;flex-direction:column;gap:18px">
+    <div class="card">
+      <h2>Session progress <span class="save-dot" id="saveDot">not saved</span></h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="n" id="sLearned">0</div><div class="l">Learned</div></div>
+        <div class="stat"><div class="n" id="sDue">0</div><div class="l">Left</div></div>
+        <div class="stat"><div class="n" id="sRound">1</div><div class="l">Round</div></div>
+      </div>
+      <div class="bar"><i id="progBar"></i></div>
+      <div class="stat-grid">
+        <div class="stat"><div class="n" id="sAcc">—</div><div class="l">Retention</div></div>
+        <div class="stat"><div class="n" id="sReviews">0</div><div class="l">Reviews</div></div>
+        <div class="stat"><div class="n" id="sTotal">0</div><div class="l">All-time</div></div>
+      </div>
+      <div class="row">
+        <button id="resetBtn" class="btn sm" disabled>↺ Reset round</button>
+        <button id="wipeBtn" class="btn sm ghost" disabled>🗑 Clear saved</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Segment queue (SM-2 state)</h2>
+      <div class="queue" id="queue"><div class="hint">Segments appear here after slicing.</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+/* ============================================================
+   LoopRep — SRS YouTube segment trainer
+   + IndexedDB persistence  + A/B loop  + speed  + infinite auto-reset
+   ============================================================ */
+
+/* ---------- State ---------- */
+let player=null, ytReady=false, pendingLoad=null;
+let videoId=null, segLen=15, duration=0;
+let cards=[], current=null;
+let step=0, reviews=0, correct=0, lapses=0;
+let round=1, totalReviews=0;
+let recent=[];                 // rolling window of recent pass/fail (1=pass)
+let ab={a:null,b:null,on:false};
+let speed=1;
+let loopTimer=null, uiTimer=null, saving=false;
+
+/* Random loop speed: 0.40 → 1.00 in steps of 0.10 only, picked per playback
+   while the segment keeps replaying (before a review/grade button is pressed). */
+function randomLoopSpeed(){
+  const steps=[0.40,0.50,0.60,0.70,0.80,0.90,1.00];
+  return steps[Math.floor(Math.random()*steps.length)];
+}
+
+/* ============================================================
+   IndexedDB layer (mirrors the earlier bucket-dashboard approach)
+   ============================================================ */
+const DB={ name:'looprep', store:'sessions', db:null };
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open(DB.name,1);
+    r.onupgradeneeded=()=>{ const d=r.result; if(!d.objectStoreNames.contains(DB.store)) d.createObjectStore(DB.store,{keyPath:'key'}); };
+    r.onsuccess=()=>{ DB.db=r.result; res(DB.db); };
+    r.onerror=()=>rej(r.error);
+  });
+}
+function idbPut(rec){
+  return new Promise((res,rej)=>{
+    if(!DB.db) return res();
+    const tx=DB.db.transaction(DB.store,'readwrite');
+    tx.objectStore(DB.store).put(rec);
+    tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
+  });
+}
+function idbGet(key){
+  return new Promise((res,rej)=>{
+    if(!DB.db) return res(null);
+    const tx=DB.db.transaction(DB.store,'readonly');
+    const rq=tx.objectStore(DB.store).get(key);
+    rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>rej(rq.error);
+  });
+}
+function idbDel(key){
+  return new Promise((res,rej)=>{
+    if(!DB.db) return res();
+    const tx=DB.db.transaction(DB.store,'readwrite');
+    tx.objectStore(DB.store).delete(key);
+    tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
+  });
+}
+const keyFor=(id,len)=>`${id}|${len}`;
+
+let saveTimer=null;
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  setDot('saving…');
+  saveTimer=setTimeout(persist,400);
+}
+async function persist(){
+  if(!videoId||!cards.length) return;
+  const rec={
+    key:keyFor(videoId,segLen), videoId, segLen, duration,
+    cards, step, reviews, correct, lapses, round, totalReviews, recent, ab, speed,
+    settings:{
+      cumulative:$('cumulative').checked, autoloop:$('autoloop').checked, autoreset:$('autoreset').checked
+    },
+    updatedAt:Date.now()
+  };
+  try{ await idbPut(rec); setDot('saved '+new Date().toLocaleTimeString()); }
+  catch(e){ setDot('save failed'); }
+}
+function setDot(t){ $('saveDot').textContent=t; }
+
+/* ============================================================
+   YouTube bootstrap
+   ============================================================ */
+function onYouTubeIframeAPIReady(){
+  player=new YT.Player('player',{
+    height:'100%',width:'100%',
+    playerVars:{rel:0,modestbranding:1,playsinline:1},
+    events:{
+      onReady:()=>{ ytReady=true; if(pendingLoad){const v=pendingLoad;pendingLoad=null;doLoad(v);} else applyUrlParams(); },
+      onStateChange:onState
+    }
+  });
+}
+function onState(e){
+  if((e.data===YT.PlayerState.CUED||e.data===YT.PlayerState.PLAYING) && duration===0){
+    const d=player.getDuration();
+    if(d){ duration=d; buildOrRestore(); }
+  }
+}
+
+/* ---------- URL parse ---------- */
+function parseVideoId(input){
+  input=(input||'').trim();
+  if(/^[\w-]{11}$/.test(input)) return input;
+  try{
+    const u=new URL(input);
+    if(u.hostname.includes('youtu.be')) return u.pathname.slice(1,12);
+    if(u.searchParams.get('v')) return u.searchParams.get('v');
+    const m=u.pathname.match(/\/(embed|shorts|v)\/([\w-]{11})/);
+    if(m) return m[2];
+  }catch(_){ const m=input.match(/[\w-]{11}/); if(m) return m[0]; }
+  return null;
+}
+
+/* ---------- URL params autoload ---------- */
+function applyUrlParams(){
+  // Read from ?query (works over http) AND #hash (works even on local file://).
+  const p=new URLSearchParams(location.search);
+  const h=new URLSearchParams((location.hash||'').replace(/^#/,''));
+  const g=(k)=> p.get(k) ?? h.get(k);
+  const raw=g('v')||g('url')||g('video');
+  const seg=g('seg')||g('length');
+  const cum=g('cumulative')??g('cum');
+  const loop=g('loop');
+  const ar=g('autoreset')??g('reset');
+  const sp=g('speed')||g('rate');
+  if(seg&&!isNaN(parseInt(seg))) $('seg').value=Math.max(2,Math.min(600,parseInt(seg)));
+  if(cum!==null) $('cumulative').checked=/^(1|true|yes|on)$/i.test(cum);
+  if(loop!==null) $('autoloop').checked=/^(1|true|yes|on)$/i.test(loop);
+  if(ar!==null) $('autoreset').checked=/^(1|true|yes|on)$/i.test(ar);
+  if(sp&&!isNaN(parseFloat(sp))){ $('speed').value=String(parseFloat(sp)); }
+  if(!raw) return;
+  const id=parseVideoId(raw);
+  if(!id){ toast('URL param present but not a valid YouTube video.'); return; }
+  $('url').value=raw; startLoad();
+}
+
+/* ============================================================
+   Load / slice / restore
+   ============================================================ */
+function startLoad(){
+  const id=parseVideoId($('url').value);
+  if(!id){ toast('Could not parse a YouTube video ID.'); return; }
+  videoId=id; segLen=Math.max(2,parseInt($('seg').value)||15);
+  cards=[]; duration=0; current=null; step=0; reviews=0; correct=0; lapses=0;
+  round=1; totalReviews=0; recent=[]; ab={a:null,b:null,on:false};
+  if(!ytReady){ pendingLoad=id; return; }
+  doLoad(id);
+}
+$('loadBtn').addEventListener('click',startLoad);
+$('url').addEventListener('keydown',e=>{ if(e.key==='Enter') startLoad(); });
+
+function doLoad(id){ player.cueVideoById(id); toast('Loading video…'); }
+
+async function buildOrRestore(){
+  // fresh slice
+  const n=Math.max(1,Math.ceil(duration/segLen));
+  cards=[];
+  for(let i=0;i<n;i++){
+    cards.push({idx:i,start:i*segLen,end:Math.min((i+1)*segLen,duration),
+      ef:2.5,reps:0,interval:0,dueStep:i,lapses:0,done:false,reviewed:0});
+  }
+  // try restore
+  try{
+    const saved=await idbGet(keyFor(videoId,segLen));
+    if(saved&&Array.isArray(saved.cards)&&saved.cards.length===cards.length){
+      cards=saved.cards; step=saved.step||0; reviews=saved.reviews||0;
+      correct=saved.correct||0; lapses=saved.lapses||0; round=saved.round||1;
+      totalReviews=saved.totalReviews||0; recent=saved.recent||[]; ab=saved.ab||ab;
+      speed=saved.speed||1;
+      if(saved.settings){
+        $('cumulative').checked=!!saved.settings.cumulative;
+        $('autoloop').checked=!!saved.settings.autoloop;
+        $('autoreset').checked=saved.settings.autoreset!==false;
+      }
+      $('speed').value=String(speed);
+      toast(`Resumed saved session · round ${round} · ${cards.filter(c=>c.done).length}/${cards.length} learned.`);
+    }else{
+      toast(`Sliced into ${n} segments of ${segLen}s.`);
+    }
+  }catch(e){ toast(`Sliced into ${n} segments of ${segLen}s.`); }
+
+  enableUI(true);
+  applyAbUI();
+  player.setPlaybackRate(speed);
+  pickNext();
+  renderAll();
+  persist();
+  startUiLoop();
+}
+
+/* ============================================================
+   Scheduler
+   ============================================================ */
+function pickNext(){
+  const pool=cards.filter(c=>!c.done);
+  if(pool.length===0){ current=null; onAllLearned(); return; }
+  pool.sort((a,b)=>a.dueStep-b.dueStep||a.idx-b.idx);
+  current=pool[0];
+  ab={a:null,b:null,on:false};        // A/B markers are per-segment: clear on each new card
+  $('abOn').checked=false; applyAbUI();
+  playCurrent();
+}
+
+const Q={again:1,hard:3,good:4,easy:5};
+function grade(kind){
+  if(!current) return;
+  const c=current, q=Q[kind];
+  reviews++; totalReviews++; step++; c.reviewed++;
+  if(q<3){
+    c.lapses++; lapses++; c.reps=0; c.interval=1;
+    c.ef=Math.max(1.3,c.ef-0.2); recent.push(0);
+  }else{
+    correct++; recent.push(1);
+    c.ef=Math.max(1.3,c.ef+(0.1-(5-q)*(0.08+(5-q)*0.02)));
+    if(c.reps===0)      c.interval=(kind==='easy')?3:(kind==='hard'?1:2);
+    else if(c.reps===1) c.interval=(kind==='easy')?8:(kind==='hard'?4:6);
+    else                c.interval=Math.round(c.interval*c.ef*(kind==='hard'?0.7:kind==='easy'?1.3:1));
+    c.reps++;
+  }
+  if(recent.length>20) recent=recent.slice(-20);
+  c.dueStep=step+c.interval;
+  const remaining=cards.filter(x=>!x.done&&x!==c).length;
+  if(q>=3&&c.interval>remaining&&c.reps>=2) c.done=true;
+
+  renderAll(); scheduleSave();
+  if(!maybeAutoReset()) pickNext();
+}
+document.querySelectorAll('.grade').forEach(b=>b.addEventListener('click',()=>grade(b.dataset.q)));
+
+/* ============================================================
+   Mastery signal + infinite auto-reset
+   ============================================================ */
+function masteryScore(){
+  if(!cards.length) return {score:0,learnedFrac:0,meanEF:2.5,ret:0};
+  const learnedFrac=cards.filter(c=>c.done).length/cards.length;
+  const meanEF=cards.reduce((s,c)=>s+c.ef,0)/cards.length;
+  const win=recent.slice(-12);
+  const ret=win.length?win.reduce((a,b)=>a+b,0)/win.length:0;
+  // normalise EF from 1.3..3.0 -> 0..1
+  const efN=Math.max(0,Math.min(1,(meanEF-1.3)/(3.0-1.3)));
+  // weighted blend
+  const score=0.5*learnedFrac+0.25*efN+0.25*ret;
+  return {score,learnedFrac,meanEF,ret,samples:win.length};
+}
+function maybeAutoReset(){
+  const m=masteryScore();
+  renderMastery(m);
+  const strong = m.learnedFrac>=0.85 && m.meanEF>=2.6 && m.ret>=0.9 && m.samples>=Math.min(8,cards.length);
+  const complete = cards.every(c=>c.done);
+  if((strong||complete) && reviews>0){
+    if($('autoreset').checked){ autoReset(complete?'all segments learned':'comprehension trending high'); return true; }
+    else if(complete){ finishSession(); return true; }
+  }
+  return false;
+}
+function autoReset(reason){
+  round++;
+  for(const c of cards){ c.ef=2.5;c.reps=0;c.interval=0;c.dueStep=c.idx;c.lapses=0;c.done=false;c.reviewed=0; }
+  step=0; reviews=0; correct=0; lapses=0; recent=[];
+  toast(`Round ${round} — ${reason}. Progress reset for endless drilling.`);
+  renderAll(); persist(); pickNext();
+}
+
+/* ============================================================
+   Playback + A/B + speed
+   ============================================================ */
+function segFrom(){ return $('cumulative').checked ? 0 : current.start; }
+function loopBounds(){
+  if(ab.on && ab.a!=null && ab.b!=null){
+    const lo=Math.min(ab.a,ab.b), hi=Math.max(ab.a,ab.b);
+    return {from:lo,to:hi};
+  }
+  return {from:segFrom(),to:current.end};
+}
+function playCurrent(){
+  if(!current) return;
+  const {from,to}=loopBounds();
+  clearInterval(loopTimer);
+  player.seekTo(from,true); player.setPlaybackRate(randomLoopSpeed()); player.playVideo();
+  loopTimer=setInterval(()=>{
+    if(!current) return;
+    const t=player.getCurrentTime();
+    if(t>=to-0.15){
+      if($('autoloop').checked || ab.on){ player.seekTo(from,true); player.setPlaybackRate(randomLoopSpeed()); }
+      else { player.pauseVideo(); clearInterval(loopTimer); }
+    }
+  },150);
+  renderBanner();
+}
+$('replayBtn').addEventListener('click',playCurrent);
+$('pauseBtn').addEventListener('click',()=>{
+  const s=player.getPlayerState();
+  if(s===YT.PlayerState.PLAYING) player.pauseVideo(); else player.playVideo();
+});
+
+/* A/B markers */
+$('setA').addEventListener('click',()=>{ ab.a=player.getCurrentTime(); if(ab.b!=null&&ab.a>ab.b){const t=ab.a;ab.a=ab.b;ab.b=t;} ab.on=true; $('abOn').checked=true; applyAbUI(); playCurrent(); scheduleSave(); });
+$('setB').addEventListener('click',()=>{ ab.b=player.getCurrentTime(); if(ab.a!=null&&ab.b<ab.a){const t=ab.a;ab.a=ab.b;ab.b=t;} ab.on=true; $('abOn').checked=true; applyAbUI(); playCurrent(); scheduleSave(); });
+$('clrAB').addEventListener('click',()=>{ ab={a:null,b:null,on:false}; $('abOn').checked=false; applyAbUI(); playCurrent(); scheduleSave(); });
+$('abOn').addEventListener('change',()=>{ ab.on=$('abOn').checked&&ab.a!=null&&ab.b!=null; applyAbUI(); playCurrent(); scheduleSave(); });
+function applyAbUI(){
+  const has=ab.a!=null&&ab.b!=null;
+  $('abChip').innerHTML=`A ${ab.a!=null?fmt(ab.a):'—'} · B ${ab.b!=null?fmt(ab.b):'—'}${ab.on&&has?' <b>(looping)</b>':''}`;
+}
+
+/* speed */
+$('speed').addEventListener('change',()=>{ speed=parseFloat($('speed').value)||1; if(player&&player.setPlaybackRate) player.setPlaybackRate(speed); scheduleSave(); });
+
+/* reset / wipe */
+$('resetBtn').addEventListener('click',()=>{ if(cards.length){ autoReset('manual reset'); }});
+$('wipeBtn').addEventListener('click',async()=>{ if(videoId){ await idbDel(keyFor(videoId,segLen)); toast('Saved session cleared.'); setDot('not saved'); }});
+
+/* ============================================================
+   Keyboard
+   ============================================================ */
+const SPEEDS=[0.25,0.5,0.75,1,1.25,1.5,1.75,2];
+document.addEventListener('keydown',e=>{
+  if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  if(e.code==='Space'){ e.preventDefault(); playCurrent(); }
+  else if(e.key==='1') grade('again');
+  else if(e.key==='2') grade('hard');
+  else if(e.key==='3') grade('good');
+  else if(e.key==='4') grade('easy');
+  else if(e.key==='a') $('setA').click();
+  else if(e.key==='b') $('setB').click();
+  else if(e.key==='x') $('clrAB').click();
+  else if(e.key===']'||e.key==='['){
+    let i=SPEEDS.indexOf(speed); if(i<0)i=3;
+    i=Math.max(0,Math.min(SPEEDS.length-1,i+(e.key===']'?1:-1)));
+    $('speed').value=String(SPEEDS[i]); $('speed').dispatchEvent(new Event('change'));
+  }
+});
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+function $(id){ return document.getElementById(id); }
+function fmt(s){ s=Math.max(0,s||0); const m=Math.floor(s/60),r=Math.floor(s%60); return `${m}:${String(r).padStart(2,'0')}`; }
+
+function renderBanner(){
+  if(!current) return;
+  $('curLabel').textContent=`Segment ${current.idx+1} / ${cards.length}`;
+  $('curMeta').textContent=`${fmt(current.start)} → ${fmt(current.end)} · EF ${current.ef.toFixed(2)} · reps ${current.reps} · seen ${current.reviewed}×`;
+  // segment band on track
+  if(duration){
+    $('tSeg').style.left=(current.start/duration*100)+'%';
+    $('tSeg').style.width=((current.end-current.start)/duration*100)+'%';
+  }
+}
+function renderStats(){
+  const learned=cards.filter(c=>c.done).length, left=cards.filter(c=>!c.done).length;
+  $('sLearned').textContent=learned; $('sDue').textContent=left; $('sRound').textContent=round;
+  $('sReviews').textContent=reviews; $('sTotal').textContent=totalReviews;
+  $('sAcc').textContent=reviews?Math.round(correct/reviews*100)+'%':'—';
+  $('progBar').style.width=cards.length?(learned/cards.length*100)+'%':'0%';
+}
+function renderQueue(){
+  const box=$('queue');
+  if(!cards.length){ box.innerHTML='<div class="hint">Segments appear here after slicing.</div>'; return; }
+  const order=[...cards].sort((a,b)=> (a.done!==b.done)?(a.done?1:-1):(a.dueStep-b.dueStep||a.idx-b.idx));
+  box.innerHTML=order.map(c=>{
+    const color=c.done?'var(--good)':(c===current?'var(--accent)':c.ef<2?'var(--hard)':'var(--muted)');
+    return `<div class="qitem ${c===current?'cur':''}">
+      <span class="dot" style="background:${color}"></span>
+      <span class="id">#${c.idx+1}</span>
+      <span class="rng">${fmt(c.start)}–${fmt(c.end)}</span>
+      <span class="tags">
+        <span class="pill">EF ${c.ef.toFixed(2)}</span>
+        <span class="pill">int ${c.interval}</span>
+        <span class="pill">${c.done?'✓ learned':'due@'+c.dueStep}</span>
+      </span></div>`;
+  }).join('');
+}
+function renderMastery(m){
+  m=m||masteryScore();
+  const pct=Math.round(m.score*100);
+  $('mBar').style.width=pct+'%';
+  let label = pct>=85?'High — reset imminent' : pct>=60?'Building' : pct>=30?'Early' : 'Fresh';
+  $('mLabel').textContent=`${label} (${pct}%)`;
+  $('mDetail').textContent=` · learned ${Math.round(m.learnedFrac*100)}% · mean EF ${m.meanEF.toFixed(2)} · recent retention ${Math.round(m.ret*100)}%`;
+}
+function renderAll(){ renderBanner(); renderStats(); renderQueue(); renderMastery(); applyAbUI(); }
+
+function enableUI(on){
+  document.querySelectorAll('.grade').forEach(b=>b.disabled=!on);
+  ['replayBtn','pauseBtn','setA','setB','clrAB','abOn','resetBtn','wipeBtn'].forEach(id=>$(id).disabled=!on);
+}
+function onAllLearned(){ if($('autoreset').checked && reviews>0) autoReset('all segments learned'); else finishSession(); }
+function finishSession(){
+  clearInterval(loopTimer);
+  document.querySelectorAll('.grade').forEach(b=>b.disabled=true);
+  $('curLabel').textContent='🎉 Session complete';
+  $('curMeta').textContent=`All ${cards.length} segments learned in round ${round} · ${totalReviews} all-time reviews. Enable auto-reset for endless drilling, or reload.`;
+  toast('Session complete!');
+}
+
+/* live playhead + A/B markers on the track */
+function startUiLoop(){
+  clearInterval(uiTimer);
+  uiTimer=setInterval(()=>{
+    if(!player||!player.getCurrentTime||!duration) return;
+    const t=player.getCurrentTime();
+    $('tPlay').style.left=(t/duration*100)+'%';
+    const A=$('tA'),B=$('tB'),F=$('tAB');
+    if(ab.a!=null){ A.style.display='block'; A.style.left=(ab.a/duration*100)+'%'; } else A.style.display='none';
+    if(ab.b!=null){ B.style.display='block'; B.style.left=(ab.b/duration*100)+'%'; } else B.style.display='none';
+    if(ab.a!=null&&ab.b!=null){ const lo=Math.min(ab.a,ab.b),hi=Math.max(ab.a,ab.b);
+      F.style.display='block'; F.style.left=(lo/duration*100)+'%'; F.style.width=((hi-lo)/duration*100)+'%'; }
+    else F.style.display='none';
+  },120);
+}
+
+/* persist settings toggles */
+['cumulative','autoloop','autoreset'].forEach(id=>$(id).addEventListener('change',scheduleSave));
+
+/* ---------- Toast ---------- */
+let toastTimer=null;
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2400); }
+
+/* ---------- Boot ---------- */
+idbOpen().catch(()=>{}); // ready for restore before/at load
+window.addEventListener('hashchange',()=>{ if(ytReady) applyUrlParams(); }); // paste #v=... live
+</script>
+</body>
+</html>
