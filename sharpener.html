@@ -239,6 +239,13 @@ let ab={a:null,b:null,on:false};
 let speed=1;
 let loopTimer=null, uiTimer=null, saving=false;
 
+/* Random loop speed: 0.40 → 1.00 in steps of 0.10 only, picked per playback
+   while the segment keeps replaying (before a review/grade button is pressed). */
+function randomLoopSpeed(){
+  const steps=[0.40,0.50,0.60,0.70,0.80,0.90,1.00];
+  return steps[Math.floor(Math.random()*steps.length)];
+}
+
 /* ============================================================
    IndexedDB layer (mirrors the earlier bucket-dashboard approach)
    ============================================================ */
@@ -497,12 +504,12 @@ function playCurrent(){
   if(!current) return;
   const {from,to}=loopBounds();
   clearInterval(loopTimer);
-  player.seekTo(from,true); player.setPlaybackRate(speed); player.playVideo();
+  player.seekTo(from,true); player.setPlaybackRate(randomLoopSpeed()); player.playVideo();
   loopTimer=setInterval(()=>{
     if(!current) return;
     const t=player.getCurrentTime();
     if(t>=to-0.15){
-      if($('autoloop').checked || ab.on) player.seekTo(from,true);
+      if($('autoloop').checked || ab.on){ player.seekTo(from,true); player.setPlaybackRate(randomLoopSpeed()); }
       else { player.pauseVideo(); clearInterval(loopTimer); }
     }
   },150);
