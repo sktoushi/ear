@@ -9,7 +9,7 @@
     --bg:#0f1220; --panel:#171b2e; --panel2:#1e2440; --line:#2a3154;
     --text:#e9ecf6; --muted:#98a0c0; --accent:#6c8cff; --accent2:#8b5cf6;
     --again:#ef4444; --hard:#f59e0b; --good:#22c55e; --easy:#38bdf8;
-    --a:#f472b6; --b:#34d399; --radius:14px;
+    --a:#f472b6; --b:#34d399; --auto:#fbbf24; --radius:14px;
   }
   *{box-sizing:border-box}
   body{
@@ -43,10 +43,12 @@
   .btn.sm{padding:7px 11px;font-size:13px}
   .btn.ghost{background:transparent}
   .btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
-  #player-box{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden}
+  #player-box{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;transition:box-shadow .3s}
   #player{width:100%;height:100%}
+  body.autopilot #player-box{box-shadow:0 0 0 2px var(--auto),0 0 22px -6px var(--auto);animation:pulse 2.2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 2px var(--auto),0 0 18px -8px var(--auto)}50%{box-shadow:0 0 0 2px var(--auto),0 0 26px -2px var(--auto)}}
   /* progress + A/B track under player */
-  .track{position:relative;height:10px;margin-top:10px;background:var(--panel2);border:1px solid var(--line);border-radius:99px;overflow:hidden}
+  .track{position:relative;height:10px;margin-top:10px;background:var(--panel2);border:1px solid var(--line);border-radius:99px;overflow:hidden;cursor:pointer}
   .track>.seg{position:absolute;top:0;bottom:0;background:linear-gradient(90deg,var(--accent),var(--accent2));opacity:.55}
   .track>.play{position:absolute;top:-3px;width:3px;height:16px;background:#fff;border-radius:2px}
   .track>.mk{position:absolute;top:-4px;width:2px;height:18px}
@@ -59,18 +61,20 @@
   .seg-banner .big{font-size:20px;font-weight:700}
   .seg-banner .meta{color:var(--muted);font-size:12px}
   .grades{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
-  .grade{padding:14px 8px;border-radius:12px;border:none;cursor:pointer;color:#0b0e18;font-weight:700;text-align:center;transition:.15s}
+  .grade{padding:14px 8px;border-radius:12px;border:none;cursor:pointer;color:#0b0e18;font-weight:700;text-align:center;transition:.15s;position:relative}
   .grade small{display:block;font-weight:600;opacity:.8;font-size:11px;margin-top:3px}
   .grade:hover{transform:translateY(-2px)}
   .grade.again{background:var(--again);color:#fff}
   .grade.hard{background:var(--hard)}
   .grade.good{background:var(--good)}
   .grade.easy{background:var(--easy)}
+  .grade.autopick{outline:3px solid var(--auto);outline-offset:2px}
   .grades button:disabled{opacity:.35;cursor:not-allowed;transform:none}
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
   .toolbar .lab{color:var(--muted);font-size:12px}
   .chip{background:var(--panel2);border:1px solid var(--line);border-radius:99px;padding:4px 10px;font-size:12px;color:var(--muted)}
   .chip b{color:var(--text)}
+  .chip.on{border-color:var(--auto);color:var(--text)}
   .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
   .stat{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
   .stat .n{font-size:20px;font-weight:700}
@@ -85,8 +89,13 @@
   .qitem .rng{color:var(--muted);font-size:11px}
   .qitem .tags{margin-left:auto;display:flex;gap:6px;font-size:11px;color:var(--muted)}
   .pill{background:#0b0e18;border:1px solid var(--line);padding:2px 6px;border-radius:99px}
+  .pill.auto{border-color:var(--auto);color:var(--auto)}
   .opts{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:12px;color:var(--muted);font-size:13px}
   .opts label{display:flex;gap:6px;align-items:center;cursor:pointer}
+  .opts input[type=number]{width:64px;padding:5px 8px}
+  .opts select{padding:5px 8px}
+  .autorow{margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--panel2);border:1px dashed var(--line)}
+  body.autopilot .autorow{border-color:var(--auto)}
   .hint{color:var(--muted);font-size:12px;line-height:1.5;margin-top:10px}
   .mastery{margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);font-size:12px;color:var(--muted)}
   .mastery b{color:var(--text)}
@@ -102,7 +111,7 @@
 </head>
 <body>
 <h1><span>LoopRep</span> — Spaced-Repetition Video Segment Trainer</h1>
-<div class="sub">Chop any YouTube video into fixed-length segments and drill them with an Anki-style (SM-2) scheduler. Progress persists across reloads; when comprehension trends high the session auto-resets for endless drilling.</div>
+<div class="sub">Chop any YouTube video into fixed-length segments and drill them with an Anki-style (SM-2) scheduler. Progress persists across reloads; when comprehension trends high the session auto-resets for endless drilling. <b>Auto mode</b> can fly the session for you — interrupt any time and your own grade is what counts.</div>
 
 <div class="wrap">
   <!-- LEFT: player + controls -->
@@ -119,6 +128,32 @@
         <label><input id="cumulative" type="checkbox" /> Cumulative playback</label>
         <label><input id="autoloop" type="checkbox" checked /> Loop until graded</label>
         <label><input id="autoreset" type="checkbox" checked /> Infinite auto-reset on mastery</label>
+        <label title="Original behaviour: each loop pass picks a random rate. Uncheck to obey the Speed selector."><input id="randSpeed" type="checkbox" checked /> Random loop speed</label>
+      </div>
+
+      <!-- ── NEW: autopilot ────────────────────────────────────────── -->
+      <div class="autorow">
+        <div class="opts" style="margin:0">
+          <label style="color:var(--text);font-weight:600">
+            <input id="autoMode" type="checkbox" /> 🤖 Auto mode (autopilot)
+          </label>
+          <label>after <input id="autoLoops" type="number" min="1" max="20" step="1" value="2" /> loop pass(es)</label>
+          <label>bias
+            <select id="autoBias">
+              <option value="balanced" selected>Balanced</option>
+              <option value="cautious">Cautious</option>
+              <option value="confident">Confident</option>
+              <option value="uniform">Uniform</option>
+            </select>
+          </label>
+          <span class="chip" id="autoChip">autopilot off</span>
+        </div>
+        <div class="hint" style="margin-top:8px">
+          The site rolls a random grade for you and keeps the session rolling. <b>Grade manually at any moment</b> — your
+          choice cancels the pending roll, counts as your own review, and autopilot simply resumes on the next segment.
+          Untick the box to stop immediately. Autopilot reviews are tagged and excluded from Retention / mastery, so only
+          <b>your</b> answers shape the honest numbers.
+        </div>
       </div>
     </div>
 
@@ -126,8 +161,8 @@
       <h2>2 · Review</h2>
       <div id="player-box"><div id="player"></div></div>
 
-      <!-- scrub + A/B track -->
-      <div class="track" id="track">
+      <!-- scrub + A/B track (click to seek) -->
+      <div class="track" id="track" title="Click to seek">
         <div class="seg" id="tSeg"></div>
         <div class="abfill" id="tAB" style="display:none"></div>
         <div class="mk mkA" id="tA" style="display:none"></div>
@@ -159,6 +194,7 @@
         <div class="row">
           <button id="replayBtn" class="btn" disabled>↻ Replay</button>
           <button id="pauseBtn" class="btn" disabled>⏸ Pause</button>
+          <button id="undoBtn" class="btn sm ghost" disabled title="Undo the last grade (u / Ctrl+Z)">↶ Undo</button>
         </div>
       </div>
 
@@ -168,7 +204,7 @@
         <button class="grade good" data-q="good" disabled>Good<small>ok</small></button>
         <button class="grade easy" data-q="easy" disabled>Easy<small>trivial</small></button>
       </div>
-      <div class="hint">Keys: <code>Space</code> replay · <code>1-4</code> grade · <code>a</code>/<code>b</code> set A/B · <code>x</code> clear A/B · <code>[</code>/<code>]</code> speed</div>
+      <div class="hint">Keys: <code>Space</code> replay · <code>1-4</code> grade · <code>a</code>/<code>b</code> set A/B · <code>x</code> clear A/B · <code>[</code>/<code>]</code> speed · <code>m</code> auto mode · <code>p</code> pause · <code>u</code> undo</div>
 
       <div class="mastery">
         <div>Mastery signal: <b id="mLabel">—</b> <span id="mDetail"></span></div>
@@ -176,7 +212,7 @@
       </div>
 
       <details>
-        <summary>How scheduling &amp; infinite reset work</summary>
+        <summary>How scheduling, auto mode &amp; infinite reset work</summary>
         <div class="hint">
           Each segment is a <b>card</b>. Grading runs <b>SM-2 (Anki)</b>, updating <i>ease factor</i>, <i>reps</i> and
           <i>interval</i>; intervals are mapped to <b>steps ahead in the queue</b>, so <code>Again/Hard</code> resurface
@@ -186,6 +222,13 @@
           The <b>mastery signal</b> blends learned fraction, mean ease factor, and recent retention. When it crosses the
           threshold (comprehension high), progress <b>auto-resets</b> — SRS state clears, the round counter increments,
           and drilling continues <b>infinitely</b>. Uncheck <i>Infinite auto-reset</i> to stop at completion instead.
+          <br><br>
+          <b>Auto mode</b> waits for the configured number of loop passes on the current segment, then rolls a grade from
+          the chosen bias distribution and submits it, moving straight to the next card — hands-free, endlessly. A pending
+          roll is cancelled the instant you press a grade key/button, pause playback (autopilot holds while paused), undo,
+          or untick the box; in all those cases the <b>original manual flow prevails</b>. Autopilot grades still drive
+          SM-2 (otherwise nothing would advance) but are excluded from the Retention stat and the mastery retention
+          window, and each card shows a <code>⚙</code> pill counting how many of its reviews were machine-rolled.
         </div>
       </details>
     </div>
@@ -202,13 +245,16 @@
       </div>
       <div class="bar"><i id="progBar"></i></div>
       <div class="stat-grid">
-        <div class="stat"><div class="n" id="sAcc">—</div><div class="l">Retention</div></div>
+        <div class="stat" title="Your own (manual) grades only"><div class="n" id="sAcc">—</div><div class="l">Retention</div></div>
         <div class="stat"><div class="n" id="sReviews">0</div><div class="l">Reviews</div></div>
         <div class="stat"><div class="n" id="sTotal">0</div><div class="l">All-time</div></div>
       </div>
-      <div class="row">
+      <div class="hint" id="splitLine" style="margin-top:-4px">manual 0 · autopilot 0</div>
+      <div class="row" style="margin-top:10px">
         <button id="resetBtn" class="btn sm" disabled>↺ Reset round</button>
         <button id="wipeBtn" class="btn sm ghost" disabled>🗑 Clear saved</button>
+        <button id="linkBtn" class="btn sm ghost" disabled title="Copy a resumable link with the current settings">🔗 Link</button>
+        <button id="exportBtn" class="btn sm ghost" disabled title="Download this session's state as JSON">⇩ Export</button>
       </div>
     </div>
 
@@ -225,29 +271,48 @@
 <script>
 /* ============================================================
    LoopRep — SRS YouTube segment trainer
-   + IndexedDB persistence  + A/B loop  + speed  + infinite auto-reset
+   + IndexedDB persistence + A/B loop + speed + infinite auto-reset
+   + AUTO MODE (autopilot): random grades, interruptible, manual wins
    ============================================================ */
 
 /* ---------- State ---------- */
 let player=null, ytReady=false, pendingLoad=null;
-let videoId=null, segLen=15, duration=0;
+let videoId=null, segLen=15, duration=0, building=false;
 let cards=[], current=null;
 let step=0, reviews=0, correct=0, lapses=0;
 let round=1, totalReviews=0;
-let recent=[];                 // rolling window of recent pass/fail (1=pass)
+let recent=[];                 // rolling window of recent MANUAL pass/fail (1=pass)
+let mReviews=0, mCorrect=0, aReviews=0;   // manual vs autopilot split
 let ab={a:null,b:null,on:false};
-let speed=1;
-let loopTimer=null, uiTimer=null, saving=false;
+let speed=1, effRate=1;
+let loopTimer=null, uiTimer=null;
+let undoStack=[];
 
-/* Random loop speed: 0.40 → 1.00 in steps of 0.10 only, picked per playback
-   while the segment keeps replaying (before a review/grade button is pressed). */
+/* autopilot runtime */
+const auto={on:false,loops:2,bias:'balanced',passes:0,paused:false,fallback:null,lastPick:null,firing:false,lastWrap:0};
+
+/* Random loop speed: picked per playback while the segment keeps replaying
+   (before a review/grade button is pressed). Snapped to rates YT accepts. */
 function randomLoopSpeed(){
   const steps=[0.40,0.50,0.60,0.70,0.80,0.90,1.00,1.10,1.20,1.30,1.40,1.50];
   return steps[Math.floor(Math.random()*steps.length)];
 }
+function availableRates(){
+  try{ const r=player&&player.getAvailablePlaybackRates&&player.getAvailablePlaybackRates();
+       if(r&&r.length) return r; }catch(_){}
+  return [0.25,0.5,0.75,1,1.25,1.5,1.75,2];
+}
+/* YouTube silently ignores unsupported rates → snap to the nearest allowed one. */
+function applyRate(r){
+  const a=availableRates();
+  const best=a.reduce((p,c)=>Math.abs(c-r)<Math.abs(p-r)?c:p,a[0]);
+  try{ player.setPlaybackRate(best); }catch(_){}
+  effRate=best; return best;
+}
+function setLoopRate(){ return applyRate($('randSpeed').checked?randomLoopSpeed():speed); }
 
 /* ============================================================
-   IndexedDB layer (mirrors the earlier bucket-dashboard approach)
+   IndexedDB layer
    ============================================================ */
 const DB={ name:'looprep', store:'sessions', db:null };
 function idbOpen(){
@@ -290,17 +355,22 @@ function scheduleSave(){
   setDot('saving…');
   saveTimer=setTimeout(persist,400);
 }
-async function persist(){
-  if(!videoId||!cards.length) return;
-  const rec={
+function sessionRecord(){
+  return {
     key:keyFor(videoId,segLen), videoId, segLen, duration,
-    cards, step, reviews, correct, lapses, round, totalReviews, recent, ab, speed,
+    cards, step, reviews, correct, lapses, round, totalReviews, recent,
+    mReviews, mCorrect, aReviews, ab, speed,
     settings:{
-      cumulative:$('cumulative').checked, autoloop:$('autoloop').checked, autoreset:$('autoreset').checked
+      cumulative:$('cumulative').checked, autoloop:$('autoloop').checked, autoreset:$('autoreset').checked,
+      randSpeed:$('randSpeed').checked,
+      autoMode:$('autoMode').checked, autoLoops:auto.loops, autoBias:auto.bias
     },
     updatedAt:Date.now()
   };
-  try{ await idbPut(rec); setDot('saved '+new Date().toLocaleTimeString()); }
+}
+async function persist(){
+  if(!videoId||!cards.length) return;
+  try{ await idbPut(sessionRecord()); setDot('saved '+new Date().toLocaleTimeString()); }
   catch(e){ setDot('save failed'); }
 }
 function setDot(t){ $('saveDot').textContent=t; }
@@ -314,7 +384,8 @@ function onYouTubeIframeAPIReady(){
     playerVars:{rel:0,modestbranding:1,playsinline:1},
     events:{
       onReady:()=>{ ytReady=true; if(pendingLoad){const v=pendingLoad;pendingLoad=null;doLoad(v);} else applyUrlParams(); },
-      onStateChange:onState
+      onStateChange:onState,
+      onError:e=>toast('YouTube error '+(e&&e.data)+' — video may be private, removed or not embeddable.')
     }
   });
 }
@@ -323,6 +394,12 @@ function onState(e){
     const d=player.getDuration();
     if(d){ duration=d; buildOrRestore(); }
   }
+  /* autopilot holds while playback is paused, resumes with playback */
+  if(e.data===YT.PlayerState.PAUSED){ auto.paused=true; clearTimeout(auto.fallback); }
+  if(e.data===YT.PlayerState.PLAYING){ if(auto.paused){ auto.paused=false; scheduleAutoFallback(); } }
+  if(e.data===YT.PlayerState.PLAYING) $('pauseBtn').textContent='⏸ Pause';
+  if(e.data===YT.PlayerState.PAUSED)  $('pauseBtn').textContent='▶ Play';
+  renderAutoChip();
 }
 
 /* ---------- URL parse ---------- */
@@ -351,11 +428,21 @@ function applyUrlParams(){
   const loop=g('loop');
   const ar=g('autoreset')??g('reset');
   const sp=g('speed')||g('rate');
+  const am=g('auto')??g('autopilot');
+  const al=g('autoloops');
+  const bias=g('bias');
+  const rs=g('randspeed');
+  const on=v=>/^(1|true|yes|on)$/i.test(v);
   if(seg&&!isNaN(parseInt(seg))) $('seg').value=Math.max(2,Math.min(600,parseInt(seg)));
-  if(cum!==null) $('cumulative').checked=/^(1|true|yes|on)$/i.test(cum);
-  if(loop!==null) $('autoloop').checked=/^(1|true|yes|on)$/i.test(loop);
-  if(ar!==null) $('autoreset').checked=/^(1|true|yes|on)$/i.test(ar);
-  if(sp&&!isNaN(parseFloat(sp))){ $('speed').value=String(parseFloat(sp)); }
+  if(cum!==null&&cum!==undefined) $('cumulative').checked=on(cum);
+  if(loop!==null&&loop!==undefined) $('autoloop').checked=on(loop);
+  if(ar!==null&&ar!==undefined) $('autoreset').checked=on(ar);
+  if(rs!==null&&rs!==undefined) $('randSpeed').checked=on(rs);
+  if(al&&!isNaN(parseInt(al))) $('autoLoops').value=Math.max(1,Math.min(20,parseInt(al)));
+  if(bias&&['balanced','cautious','confident','uniform'].includes(bias)) $('autoBias').value=bias;
+  if(am!==null&&am!==undefined) $('autoMode').checked=on(am);
+  if(sp&&!isNaN(parseFloat(sp))){ $('speed').value=String(parseFloat(sp)); speed=parseFloat(sp); }
+  readAutoSettings();
   if(!raw) return;
   const id=parseVideoId(raw);
   if(!id){ toast('URL param present but not a valid YouTube video.'); return; }
@@ -369,38 +456,58 @@ function startLoad(){
   const id=parseVideoId($('url').value);
   if(!id){ toast('Could not parse a YouTube video ID.'); return; }
   videoId=id; segLen=Math.max(2,parseInt($('seg').value)||15);
-  cards=[]; duration=0; current=null; step=0; reviews=0; correct=0; lapses=0;
-  round=1; totalReviews=0; recent=[]; ab={a:null,b:null,on:false};
+  cards=[]; duration=0; building=false; current=null; step=0; reviews=0; correct=0; lapses=0;
+  round=1; totalReviews=0; recent=[]; mReviews=0; mCorrect=0; aReviews=0;
+  ab={a:null,b:null,on:false}; undoStack=[];
+  stopAutopilotTimers();
+  clearInterval(loopTimer);
+  try{ localStorage.setItem('looprep:lastUrl',$('url').value.trim()); }catch(_){}
   if(!ytReady){ pendingLoad=id; return; }
   doLoad(id);
 }
 $('loadBtn').addEventListener('click',startLoad);
 $('url').addEventListener('keydown',e=>{ if(e.key==='Enter') startLoad(); });
 
-function doLoad(id){ player.cueVideoById(id); toast('Loading video…'); }
+function doLoad(id){ player.cueVideoById(id); toast('Loading video…'); pollDuration(0); }
+/* Fallback: some cue paths never fire a usable state change. */
+function pollDuration(tries){
+  if(duration||building) return;
+  let d=0; try{ d=player.getDuration&&player.getDuration(); }catch(_){}
+  if(d&&d>0){ duration=d; buildOrRestore(); return; }
+  if(tries<60) setTimeout(()=>pollDuration(tries+1),300);
+  else toast('Could not read the video duration — try pressing Load again.');
+}
 
 async function buildOrRestore(){
+  if(building) return; building=true;
   // fresh slice
   const n=Math.max(1,Math.ceil(duration/segLen));
   cards=[];
   for(let i=0;i<n;i++){
     cards.push({idx:i,start:i*segLen,end:Math.min((i+1)*segLen,duration),
-      ef:2.5,reps:0,interval:0,dueStep:i,lapses:0,done:false,reviewed:0});
+      ef:2.5,reps:0,interval:0,dueStep:i,lapses:0,done:false,reviewed:0,autoReviewed:0});
   }
   // try restore
   try{
     const saved=await idbGet(keyFor(videoId,segLen));
     if(saved&&Array.isArray(saved.cards)&&saved.cards.length===cards.length){
-      cards=saved.cards; step=saved.step||0; reviews=saved.reviews||0;
+      cards=saved.cards.map(c=>Object.assign({autoReviewed:0},c));
+      step=saved.step||0; reviews=saved.reviews||0;
       correct=saved.correct||0; lapses=saved.lapses||0; round=saved.round||1;
       totalReviews=saved.totalReviews||0; recent=saved.recent||[]; ab=saved.ab||ab;
+      mReviews=saved.mReviews||0; mCorrect=saved.mCorrect||0; aReviews=saved.aReviews||0;
       speed=saved.speed||1;
       if(saved.settings){
         $('cumulative').checked=!!saved.settings.cumulative;
         $('autoloop').checked=!!saved.settings.autoloop;
         $('autoreset').checked=saved.settings.autoreset!==false;
+        $('randSpeed').checked=saved.settings.randSpeed!==false;
+        if(saved.settings.autoLoops) $('autoLoops').value=saved.settings.autoLoops;
+        if(saved.settings.autoBias) $('autoBias').value=saved.settings.autoBias;
+        $('autoMode').checked=!!saved.settings.autoMode;
       }
       $('speed').value=String(speed);
+      readAutoSettings();
       toast(`Resumed saved session · round ${round} · ${cards.filter(c=>c.done).length}/${cards.length} learned.`);
     }else{
       toast(`Sliced into ${n} segments of ${segLen}s.`);
@@ -409,7 +516,7 @@ async function buildOrRestore(){
 
   enableUI(true);
   applyAbUI();
-  player.setPlaybackRate(speed);
+  applyRate(speed);
   pickNext();
   renderAll();
   persist();
@@ -430,15 +537,48 @@ function pickNext(){
 }
 
 const Q={again:1,hard:3,good:4,easy:5};
-function grade(kind){
+
+function snapshot(){
+  return JSON.stringify({cards,step,reviews,correct,lapses,round,totalReviews,recent,
+    mReviews,mCorrect,aReviews,curIdx:current?current.idx:null});
+}
+function pushUndo(){
+  undoStack.push(snapshot());
+  if(undoStack.length>25) undoStack.shift();
+  $('undoBtn').disabled=false;
+}
+function undoLast(){
+  if(!undoStack.length) return;
+  const s=JSON.parse(undoStack.pop());
+  cards=s.cards; step=s.step; reviews=s.reviews; correct=s.correct; lapses=s.lapses;
+  round=s.round; totalReviews=s.totalReviews; recent=s.recent;
+  mReviews=s.mReviews; mCorrect=s.mCorrect; aReviews=s.aReviews;
+  current=(s.curIdx!=null)?cards.find(c=>c.idx===s.curIdx)||null:null;
+  stopAutopilotTimers(); auto.passes=0; auto.lastPick=null; clearAutoHighlight();
+  document.querySelectorAll('.grade').forEach(b=>b.disabled=false);
+  $('undoBtn').disabled=!undoStack.length;
+  renderAll(); scheduleSave();
+  if(current) playCurrent();
+  toast('Undid last grade.');
+}
+$('undoBtn').addEventListener('click',undoLast);
+
+/* grade(kind, isAuto) — manual is the default and always wins over a pending roll */
+function grade(kind,isAuto){
   if(!current) return;
+  if(!Q[kind]) return;
+  if(!isAuto) stopAutopilotTimers();          // interrupting cancels the machine roll
+  pushUndo();
+  clearAutoHighlight();
   const c=current, q=Q[kind];
   reviews++; totalReviews++; step++; c.reviewed++;
+  if(isAuto){ aReviews++; c.autoReviewed=(c.autoReviewed||0)+1; }
+  else{ mReviews++; }
   if(q<3){
     c.lapses++; lapses++; c.reps=0; c.interval=1;
-    c.ef=Math.max(1.3,c.ef-0.2); recent.push(0);
+    c.ef=Math.max(1.3,c.ef-0.2); if(!isAuto) recent.push(0);
   }else{
-    correct++; recent.push(1);
+    correct++; if(!isAuto){ mCorrect++; recent.push(1); }
     c.ef=Math.max(1.3,c.ef+(0.1-(5-q)*(0.08+(5-q)*0.02)));
     if(c.reps===0)      c.interval=(kind==='easy')?3:(kind==='hard'?1:2);
     else if(c.reps===1) c.interval=(kind==='easy')?8:(kind==='hard'?4:6);
@@ -456,10 +596,94 @@ function grade(kind){
 document.querySelectorAll('.grade').forEach(b=>b.addEventListener('click',()=>grade(b.dataset.q)));
 
 /* ============================================================
+   AUTO MODE (autopilot)
+   ============================================================ */
+const BIAS={
+  balanced :{again:.15,hard:.25,good:.40,easy:.20},
+  cautious :{again:.30,hard:.35,good:.25,easy:.10},
+  confident:{again:.05,hard:.15,good:.45,easy:.35},
+  uniform  :{again:.25,hard:.25,good:.25,easy:.25}
+};
+function rollGrade(){
+  const w=BIAS[auto.bias]||BIAS.balanced;
+  let r=Math.random(), acc=0;
+  for(const k of ['again','hard','good','easy']){ acc+=w[k]; if(r<=acc) return k; }
+  return 'good';
+}
+function readAutoSettings(){
+  auto.loops=Math.max(1,Math.min(20,parseInt($('autoLoops').value)||2));
+  auto.bias=$('autoBias').value||'balanced';
+  auto.on=$('autoMode').checked;
+  document.body.classList.toggle('autopilot',auto.on);
+  renderAutoChip();
+}
+function stopAutopilotTimers(){ clearTimeout(auto.fallback); auto.fallback=null; auto.firing=false; }
+/* Safety net so autopilot never stalls if loop-wrap detection misses
+   (blocked autoplay, buffering, tab throttling…). */
+function scheduleAutoFallback(){
+  clearTimeout(auto.fallback);
+  if(!auto.on||!current||auto.paused) return;
+  const {from,to}=loopBounds();
+  const span=Math.max(1,to-from);
+  const ms=(auto.loops*span/0.6)*1000+8000;
+  auto.fallback=setTimeout(()=>{ if(auto.on&&current&&!auto.paused) fireAuto(); },ms);
+}
+function noteLoopPass(){
+  const now=Date.now();
+  /* Debounce duplicate detections, but scale the guard to the loop length so
+     very short A/B loops (or high rates) still get counted honestly. */
+  const {from,to}=loopBounds();
+  const guard=Math.max(60,Math.min(350,(to-from)*1000*0.3/Math.max(0.25,effRate)));
+  if(now-auto.lastWrap<guard) return;
+  auto.lastWrap=now; auto.passes++;
+  renderAutoChip();
+  if(auto.on&&!auto.paused&&auto.passes>=auto.loops) fireAuto();
+}
+function fireAuto(){
+  if(!auto.on||!current||auto.firing) return;
+  auto.firing=true;
+  const pick=rollGrade();
+  auto.lastPick=pick;
+  highlightAutoPick(pick);
+  toast(`🤖 Autopilot · segment ${current.idx+1} → ${pick}`);
+  stopAutopilotTimers();
+  grade(pick,true);
+  auto.firing=false;
+}
+function highlightAutoPick(kind){
+  clearAutoHighlight();
+  const b=document.querySelector(`.grade[data-q="${kind}"]`);
+  if(b){ b.classList.add('autopick'); setTimeout(()=>b.classList.remove('autopick'),700); }
+}
+function clearAutoHighlight(){ document.querySelectorAll('.grade.autopick').forEach(b=>b.classList.remove('autopick')); }
+function renderAutoChip(){
+  const chip=$('autoChip'); if(!chip) return;
+  chip.classList.toggle('on',auto.on);
+  if(!auto.on){ chip.innerHTML=auto.lastPick?`autopilot off · last roll <b>${auto.lastPick}</b>`:'autopilot off'; return; }
+  if(!current){ chip.innerHTML='autopilot armed · waiting for a segment'; return; }
+  if(auto.paused){ chip.innerHTML='autopilot <b>held</b> (playback paused)'; return; }
+  chip.innerHTML=`autopilot <b>on</b> · pass ${Math.min(auto.passes+1,auto.loops)}/${auto.loops}${auto.lastPick?` · last <b>${auto.lastPick}</b>`:''}`;
+}
+$('autoMode').addEventListener('change',()=>{
+  readAutoSettings();
+  if(auto.on){
+    auto.passes=0; auto.paused=(player&&player.getPlayerState&&player.getPlayerState()===YT.PlayerState.PAUSED);
+    scheduleAutoFallback();
+    toast(current?`Autopilot on — rolling a grade every ${auto.loops} loop pass(es).`:'Autopilot armed — load a video to start.');
+  }else{
+    stopAutopilotTimers(); clearAutoHighlight();
+    toast('Autopilot off — you are back in manual control.');
+  }
+  renderAutoChip(); scheduleSave();
+});
+$('autoLoops').addEventListener('change',()=>{ readAutoSettings(); scheduleAutoFallback(); scheduleSave(); });
+$('autoBias').addEventListener('change',()=>{ readAutoSettings(); scheduleSave(); });
+
+/* ============================================================
    Mastery signal + infinite auto-reset
    ============================================================ */
 function masteryScore(){
-  if(!cards.length) return {score:0,learnedFrac:0,meanEF:2.5,ret:0};
+  if(!cards.length) return {score:0,learnedFrac:0,meanEF:2.5,ret:0,samples:0};
   const learnedFrac=cards.filter(c=>c.done).length/cards.length;
   const meanEF=cards.reduce((s,c)=>s+c.ef,0)/cards.length;
   const win=recent.slice(-12);
@@ -483,8 +707,10 @@ function maybeAutoReset(){
 }
 function autoReset(reason){
   round++;
-  for(const c of cards){ c.ef=2.5;c.reps=0;c.interval=0;c.dueStep=c.idx;c.lapses=0;c.done=false;c.reviewed=0; }
-  step=0; reviews=0; correct=0; lapses=0; recent=[];
+  for(const c of cards){ c.ef=2.5;c.reps=0;c.interval=0;c.dueStep=c.idx;c.lapses=0;c.done=false;c.reviewed=0;c.autoReviewed=0; }
+  step=0; reviews=0; correct=0; lapses=0; recent=[]; mReviews=0; mCorrect=0; aReviews=0;
+  undoStack=[]; $('undoBtn').disabled=true;
+  document.querySelectorAll('.grade').forEach(b=>b.disabled=false);
   toast(`Round ${round} — ${reason}. Progress reset for endless drilling.`);
   renderAll(); persist(); pickNext();
 }
@@ -494,6 +720,7 @@ function autoReset(reason){
    ============================================================ */
 function segFrom(){ return $('cumulative').checked ? 0 : current.start; }
 function loopBounds(){
+  if(!current) return {from:0,to:0};
   if(ab.on && ab.a!=null && ab.b!=null){
     const lo=Math.min(ab.a,ab.b), hi=Math.max(ab.a,ab.b);
     return {from:lo,to:hi};
@@ -504,21 +731,33 @@ function playCurrent(){
   if(!current) return;
   const {from,to}=loopBounds();
   clearInterval(loopTimer);
-  player.seekTo(from,true); player.setPlaybackRate(randomLoopSpeed()); player.playVideo();
+  auto.passes=0; auto.lastWrap=0;
+  player.seekTo(from,true); setLoopRate(); player.playVideo();
+  scheduleAutoFallback();
   loopTimer=setInterval(()=>{
     if(!current) return;
-    const t=player.getCurrentTime();
+    let t=0; try{ t=player.getCurrentTime(); }catch(_){ return; }
     if(t>=to-0.15){
-      if($('autoloop').checked || ab.on){ player.seekTo(from,true); player.setPlaybackRate(randomLoopSpeed()); }
-      else { player.pauseVideo(); clearInterval(loopTimer); }
+      if($('autoloop').checked || ab.on){ player.seekTo(from,true); setLoopRate(); noteLoopPass(); }
+      else { player.pauseVideo(); clearInterval(loopTimer); noteLoopPass(); }
     }
   },150);
-  renderBanner();
+  renderBanner(); renderAutoChip();
 }
-$('replayBtn').addEventListener('click',playCurrent);
+$('replayBtn').addEventListener('click',()=>{ playCurrent(); });
 $('pauseBtn').addEventListener('click',()=>{
   const s=player.getPlayerState();
-  if(s===YT.PlayerState.PLAYING) player.pauseVideo(); else player.playVideo();
+  if(s===YT.PlayerState.PLAYING){ player.pauseVideo(); auto.paused=true; stopAutopilotTimers(); }
+  else { player.playVideo(); auto.paused=false; scheduleAutoFallback(); }
+  renderAutoChip();
+});
+
+/* click-to-seek on the track */
+$('track').addEventListener('click',e=>{
+  if(!duration) return;
+  const r=$('track').getBoundingClientRect();
+  const pct=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+  try{ player.seekTo(pct*duration,true); }catch(_){}
 });
 
 /* A/B markers */
@@ -532,11 +771,39 @@ function applyAbUI(){
 }
 
 /* speed */
-$('speed').addEventListener('change',()=>{ speed=parseFloat($('speed').value)||1; if(player&&player.setPlaybackRate) player.setPlaybackRate(speed); scheduleSave(); });
+$('speed').addEventListener('change',()=>{ speed=parseFloat($('speed').value)||1; if(!$('randSpeed').checked) applyRate(speed); scheduleSave(); });
+$('randSpeed').addEventListener('change',()=>{ if(!$('randSpeed').checked) applyRate(speed); scheduleSave(); });
 
-/* reset / wipe */
+/* reset / wipe / link / export */
 $('resetBtn').addEventListener('click',()=>{ if(cards.length){ autoReset('manual reset'); }});
-$('wipeBtn').addEventListener('click',async()=>{ if(videoId){ await idbDel(keyFor(videoId,segLen)); toast('Saved session cleared.'); setDot('not saved'); }});
+$('wipeBtn').addEventListener('click',async()=>{
+  if(!videoId) return;
+  if(!confirm('Delete the saved state for this video + segment length?')) return;
+  clearTimeout(saveTimer);                        // don't let a queued save resurrect it
+  await idbDel(keyFor(videoId,segLen));
+  toast('Saved session cleared.'); setDot('not saved');
+});
+$('linkBtn').addEventListener('click',async()=>{
+  if(!videoId) return;
+  const h=new URLSearchParams({
+    v:videoId, seg:String(segLen), cum:$('cumulative').checked?'1':'0',
+    loop:$('autoloop').checked?'1':'0', reset:$('autoreset').checked?'1':'0',
+    randspeed:$('randSpeed').checked?'1':'0', speed:String(speed),
+    auto:$('autoMode').checked?'1':'0', autoloops:String(auto.loops), bias:auto.bias
+  }).toString();
+  const url=location.origin+location.pathname+'#'+h;
+  try{ await navigator.clipboard.writeText(url); toast('Resumable link copied to clipboard.'); }
+  catch(_){ location.hash=h; toast('Link written to the address bar (clipboard blocked).'); }
+});
+$('exportBtn').addEventListener('click',()=>{
+  if(!videoId||!cards.length) return;
+  const blob=new Blob([JSON.stringify(sessionRecord(),null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`looprep-${videoId}-${segLen}s.json`;
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  toast('Session exported.');
+});
 
 /* ============================================================
    Keyboard
@@ -544,6 +811,8 @@ $('wipeBtn').addEventListener('click',async()=>{ if(videoId){ await idbDel(keyFo
 const SPEEDS=[0.25,0.5,0.75,1,1.25,1.5,1.75,2];
 document.addEventListener('keydown',e=>{
   if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  if(e.ctrlKey&&(e.key==='z'||e.key==='Z')){ e.preventDefault(); undoLast(); return; }
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
   if(e.code==='Space'){ e.preventDefault(); playCurrent(); }
   else if(e.key==='1') grade('again');
   else if(e.key==='2') grade('hard');
@@ -552,6 +821,9 @@ document.addEventListener('keydown',e=>{
   else if(e.key==='a') $('setA').click();
   else if(e.key==='b') $('setB').click();
   else if(e.key==='x') $('clrAB').click();
+  else if(e.key==='u') undoLast();
+  else if(e.key==='p'){ e.preventDefault(); if(!$('pauseBtn').disabled) $('pauseBtn').click(); }
+  else if(e.key==='m'){ $('autoMode').checked=!$('autoMode').checked; $('autoMode').dispatchEvent(new Event('change')); }
   else if(e.key===']'||e.key==='['){
     let i=SPEEDS.indexOf(speed); if(i<0)i=3;
     i=Math.max(0,Math.min(SPEEDS.length-1,i+(e.key===']'?1:-1)));
@@ -568,7 +840,7 @@ function fmt(s){ s=Math.max(0,s||0); const m=Math.floor(s/60),r=Math.floor(s%60)
 function renderBanner(){
   if(!current) return;
   $('curLabel').textContent=`Segment ${current.idx+1} / ${cards.length}`;
-  $('curMeta').textContent=`${fmt(current.start)} → ${fmt(current.end)} · EF ${current.ef.toFixed(2)} · reps ${current.reps} · seen ${current.reviewed}×`;
+  $('curMeta').textContent=`${fmt(current.start)} → ${fmt(current.end)} · EF ${current.ef.toFixed(2)} · reps ${current.reps} · seen ${current.reviewed}× · rate ${effRate}×`;
   // segment band on track
   if(duration){
     $('tSeg').style.left=(current.start/duration*100)+'%';
@@ -579,7 +851,9 @@ function renderStats(){
   const learned=cards.filter(c=>c.done).length, left=cards.filter(c=>!c.done).length;
   $('sLearned').textContent=learned; $('sDue').textContent=left; $('sRound').textContent=round;
   $('sReviews').textContent=reviews; $('sTotal').textContent=totalReviews;
-  $('sAcc').textContent=reviews?Math.round(correct/reviews*100)+'%':'—';
+  // Retention reflects YOUR grades only; autopilot rolls are excluded.
+  $('sAcc').textContent=mReviews?Math.round(mCorrect/mReviews*100)+'%':'—';
+  $('splitLine').textContent=`manual ${mReviews} · autopilot ${aReviews}${aReviews?' (excluded from retention & mastery)':''}`;
   $('progBar').style.width=cards.length?(learned/cards.length*100)+'%':'0%';
 }
 function renderQueue(){
@@ -593,6 +867,7 @@ function renderQueue(){
       <span class="id">#${c.idx+1}</span>
       <span class="rng">${fmt(c.start)}–${fmt(c.end)}</span>
       <span class="tags">
+        ${c.autoReviewed?`<span class="pill auto" title="autopilot-rolled reviews">⚙ ${c.autoReviewed}</span>`:''}
         <span class="pill">EF ${c.ef.toFixed(2)}</span>
         <span class="pill">int ${c.interval}</span>
         <span class="pill">${c.done?'✓ learned':'due@'+c.dueStep}</span>
@@ -605,20 +880,23 @@ function renderMastery(m){
   $('mBar').style.width=pct+'%';
   let label = pct>=85?'High — reset imminent' : pct>=60?'Building' : pct>=30?'Early' : 'Fresh';
   $('mLabel').textContent=`${label} (${pct}%)`;
-  $('mDetail').textContent=` · learned ${Math.round(m.learnedFrac*100)}% · mean EF ${m.meanEF.toFixed(2)} · recent retention ${Math.round(m.ret*100)}%`;
+  $('mDetail').textContent=` · learned ${Math.round(m.learnedFrac*100)}% · mean EF ${m.meanEF.toFixed(2)} · your retention ${Math.round(m.ret*100)}%`;
 }
-function renderAll(){ renderBanner(); renderStats(); renderQueue(); renderMastery(); applyAbUI(); }
+function renderAll(){ renderBanner(); renderStats(); renderQueue(); renderMastery(); applyAbUI(); renderAutoChip(); }
 
 function enableUI(on){
   document.querySelectorAll('.grade').forEach(b=>b.disabled=!on);
-  ['replayBtn','pauseBtn','setA','setB','clrAB','abOn','resetBtn','wipeBtn'].forEach(id=>$(id).disabled=!on);
+  ['replayBtn','pauseBtn','setA','setB','clrAB','abOn','resetBtn','wipeBtn','linkBtn','exportBtn'].forEach(id=>$(id).disabled=!on);
+  $('undoBtn').disabled=!on||!undoStack.length;
 }
 function onAllLearned(){ if($('autoreset').checked && reviews>0) autoReset('all segments learned'); else finishSession(); }
 function finishSession(){
   clearInterval(loopTimer);
+  stopAutopilotTimers();
   document.querySelectorAll('.grade').forEach(b=>b.disabled=true);
   $('curLabel').textContent='🎉 Session complete';
   $('curMeta').textContent=`All ${cards.length} segments learned in round ${round} · ${totalReviews} all-time reviews. Enable auto-reset for endless drilling, or reload.`;
+  renderAutoChip();
   toast('Session complete!');
 }
 
@@ -627,7 +905,7 @@ function startUiLoop(){
   clearInterval(uiTimer);
   uiTimer=setInterval(()=>{
     if(!player||!player.getCurrentTime||!duration) return;
-    const t=player.getCurrentTime();
+    let t=0; try{ t=player.getCurrentTime(); }catch(_){ return; }
     $('tPlay').style.left=(t/duration*100)+'%';
     const A=$('tA'),B=$('tB'),F=$('tAB');
     if(ab.a!=null){ A.style.display='block'; A.style.left=(ab.a/duration*100)+'%'; } else A.style.display='none';
@@ -647,7 +925,11 @@ function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('sho
 
 /* ---------- Boot ---------- */
 idbOpen().catch(()=>{}); // ready for restore before/at load
+try{ const last=localStorage.getItem('looprep:lastUrl'); if(last) $('url').value=last; }catch(_){}
+readAutoSettings();
 window.addEventListener('hashchange',()=>{ if(ytReady) applyUrlParams(); }); // paste #v=... live
+window.addEventListener('beforeunload',()=>{ try{ persist(); }catch(_){} });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) stopAutopilotTimers(); else scheduleAutoFallback(); });
 </script>
 </body>
 </html>
