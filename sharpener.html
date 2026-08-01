@@ -2069,6 +2069,293 @@ contTimer=setInterval(contTick,200);
 idbOpen().then(()=>refreshLibrary()).catch(()=>{});
 setTimeout(()=>{ captureTitles(); refreshLibrary(); },2500);
 updateLibButtons();
+
+const fix = {
+  seekAt: 0,             // last seek on the review player (buffer warm-up window)
+  warmupMs: 3000,        // ignore the headroom signal this long after a seek
+  settleMs: 1200,        // ignore stall detection right after a seek
+  minHealthyMs: 6000,    // playback must survive this long before a *soft* re-engage
+  lastRelease: 0,
+  fillerCooldownMs: 20000,
+  lastFiller: 0,
+  fillerBreaks: 0,
+  advWinT: -1, advWinAt: 0, advRate: 1,
+  selfFiller: false,
+  pendingFiller: false,
+  breakWasFiller: false,
+  cardSince: 0,
+  cardPending: false,    // true when the card behind a break is still ungraded
+  sinceBreakSnap: 0
+};
+
+/* ============================================================
+   FIX 1 — trustworthy stall / headroom detection
+   ============================================================ */
+function contTickSafe(){
+  if(!cont.on){ if(cont.active) releaseContinuity(); renderCont(); return; }
+  const now = Date.now();
+  if(breakActive){ if(cont.shieldBreak) contBreakTick(now); renderCont(); return; }
+  if(!current || !player || !player.getCurrentTime) return;
+
+  let st=-1, t=0;
+  try{ st=player.getPlayerState(); t=player.getCurrentTime(); }catch(_){ return; }
+
+  /* playhead bookkeeping */
+  if(t > cont.lastT + 0.02){ cont.lastT=t; cont.lastAdv=now; }
+  if(now - fix.seekAt < fix.settleMs){ cont.lastT=t; cont.lastAdv=now; }   // a seek is not a stall
+  const stalledFor = now - cont.lastAdv;
+
+  /* measured advance rate over ~1 s — a loop wrap makes t jump backwards */
+  if(!fix.advWinAt || t < fix.advWinT){ fix.advWinT=t; fix.advWinAt=now; fix.advRate=effRate; }
+  else {
+    const dw=(now-fix.advWinAt)/1000;
+    if(dw>1){ fix.advRate=(t-fix.advWinT)/dw; fix.advWinT=t; fix.advWinAt=now; }
+  }
+
+  /* headroom: only trusted once the buffer has had time to grow after the seek */
+  const lt = loadedSecs(player, duration);
+  const warmedUp = (now - fix.seekAt) > fix.warmupMs;
+  const head = (warmedUp && lt > t + 0.05) ? (lt - t) : Infinity;
+  cont.headLast = head;
+  if(duration && lt){ const b=$('tBuf'); if(b) b.style.width=Math.min(100, lt/duration*100)+'%'; }
+
+  if(cont.active){
+    if(now >= cont.retryAt) probeReturn();
+    renderCont();
+    return;
+  }
+  if(st===YT.PlayerState.PAUSED || st===YT.PlayerState.CUED || st===YT.PlayerState.ENDED || st===-1){
+    cont.lastAdv=now; cont.waiting=false; renderCont(); return;             // user paused: not a stall
+  }
+
+  /* probe window from a previous hop */
+  if(cont.probeUntil){
+    if(now < cont.probeUntil){
+      if(stalledFor > cont.graceMs){ cont.probeUntil=0; engageContinuity('probe failed — still buffering',{force:true,hard:true}); return; }
+    }else if(stalledFor > cont.graceMs){
+      cont.probeUntil=0; engageContinuity('probe failed — still buffering',{force:true,hard:true}); return;
+    }else{
+      cont.probeUntil=0; cont.backoff=0;
+      toast(`▸ Buffer recovered — back on segment #${current.idx+1}.`);
+    }
+  }
+
+  const buffering = (st===YT.PlayerState.BUFFERING);
+  const playing   = (st===YT.PlayerState.PLAYING);
+  const degraded  = fix.advRate < 0.55*Math.max(0.25, effRate);
+  const needsMore = (loopBounds().to - t) > 0.4;
+
+  const hardStall   = (playing||buffering) && stalledFor > Math.max(cont.graceMs, 700);
+  const bufferStall = buffering && stalledFor > cont.graceMs*0.6;
+  /* pre-empt now needs BOTH a thin (trusted) buffer AND real evidence that the
+     playhead is faltering — a healthy stream can no longer trip it. */
+  const preempt = cont.head>0 && isFinite(head) && head < cont.head && needsMore && (buffering || degraded);
+
+  if(hardStall)        engageContinuity('playback stalled '+(stalledFor/1000).toFixed(1)+'s', {hard:true});
+  else if(bufferStall) engageContinuity('buffering', {hard:true});
+  else if(preempt)     engageContinuity('pre-empt: ~'+head.toFixed(1)+'s buffered', {});
+  else cont.waiting=false;
+
+  renderCont();
+}
+
+/* ============================================================
+   FIX 2 — engage: prefer a warm segment, then the buffered head of the
+   CURRENT segment, and only ever roll the break video on a true hard stall
+   ============================================================ */
+function engageContinuitySafe(reason, opts){
+  opts = opts || {};
+  if(!cont.on || cont.active || breakActive || !current) return;
+  const now = Date.now();
+  if(!opts.force && now - cont.lastEngage < 4000) return;                       // anti-flap
+  if(!opts.hard && now - fix.lastRelease < fix.minHealthyMs) return;            // let a fresh start settle
+
+  let from=null, to=0, holdIdx=null, self=false;
+  const w = pickWarm(current.idx);
+  if(w){ from=cards[w.idx].start; to=cards[w.idx].end; holdIdx=w.idx; }
+  else{
+    /* self-filler: replay the part of THIS card that is already decoded */
+    const lo=current.start;
+    const hi=Math.min(current.end, Math.max(lo+2.5, (cont.lastT||0)-0.4));
+    if(hi-lo >= 2.5){ from=lo; to=hi; holdIdx=current.idx; self=true; }
+  }
+
+  if(from===null){
+    if(opts.hard && cont.useBreak && breakReady() && now-fix.lastFiller > fix.fillerCooldownMs){
+      cont.viaBreak=true; cont.saves++; cont.lastEngage=now;
+      fix.pendingFiller=true;
+      toast('⚡ Nothing decoded yet — rolling the break video as network filler.');
+      startBreak(()=>{ cont.viaBreak=false; cont.lastT=-1; cont.lastAdv=Date.now(); playCurrent(); }, true);
+      fix.pendingFiller=false;
+      renderCont(); return;
+    }
+    cont.waiting=true; renderCont(); return;                                   // just wait it out
+  }
+
+  cont.active=true; cont.saves++; cont.hops++; cont.waiting=false;
+  cont.lastEngage=now;
+  cont.origin=loopBounds();
+  cont.holdIdx=holdIdx; cont.from=from; cont.to=to;
+  fix.selfFiller=self;
+  cont.backoff = cont.backoff ? Math.min(60000, cont.backoff*2) : cont.holdMs;
+  cont.retryAt = now + cont.backoff;
+  document.body.classList.add('continuity');
+  clearInterval(loopTimer);
+  stopAutopilotTimers();
+  cont.autoWas = false;                        // never latch autopilot as "paused"
+  auto.paused = true;
+  document.querySelectorAll('.grade').forEach(b=>{ b.dataset.cWas=b.disabled?'1':'0'; b.disabled=true; });
+  try{ player.seekTo(from,true); player.playVideo(); }catch(_){}
+  fix.seekAt=now;
+  clearInterval(contLoopTimer);
+  contLoopTimer=setInterval(()=>{
+    if(!cont.active) return;
+    let t=cont.from; try{ t=player.getCurrentTime(); }catch(_){ return; }
+    if(t>=cont.to-0.15 || t<cont.from-1){ try{ player.seekTo(cont.from,true); player.playVideo(); }catch(_){} }
+  },200);
+  toast(`⚡ ${reason} — ${self?'looping the buffered head of':'holding the flow on'} segment #${holdIdx+1}; card #${current.idx+1} frozen (not graded).`);
+  renderCont(); renderBanner();
+}
+
+/* swap the implementations + restart the detector timer (setInterval captured
+   the OLD contTick by value, so the timer itself must be re-armed) */
+engageContinuity = engageContinuitySafe;
+contTick = contTickSafe;
+clearInterval(contTimer);
+contTimer = setInterval(contTick, 200);
+
+const _relFix = releaseContinuity;
+releaseContinuity = function(){
+  const was = cont.active;
+  const out = _relFix.apply(this, arguments);
+  if(was){
+    fix.lastRelease = Date.now();
+    fix.selfFiller = false;
+    auto.paused = false;
+    if(auto.on) scheduleAutoFallback();
+  }
+  return out;
+};
+
+/* ============================================================
+   FIX 3 — the min-gap gauge is now a hard gate, and a network filler
+   is no longer accounted as a rest break
+   ============================================================ */
+const _sbFix = startBreak;
+startBreak = function(resume, manual){
+  const now = Date.now();
+  const isFiller = !!fix.pendingFiller;
+  if(!manual && !isFiller && fatigue.sinceBreak < fatigue.gap){
+    /* forecast said "rest" but you have not done enough reviews since the last
+       break — obey the gauge and hand the turn straight back */
+    if(resume) resume();
+    return;
+  }
+  if(isFiller && now - fix.lastFiller < fix.fillerCooldownMs){ if(resume) resume(); return; }
+
+  fix.breakWasFiller = isFiller;
+  fix.cardPending    = !!(manual || isFiller);   // card behind this break is still ungraded
+  fix.sinceBreakSnap = fatigue.sinceBreak;
+  if(isFiller){ fix.lastFiller = now; fix.fillerBreaks++; }
+
+  const out = _sbFix.call(this, resume, manual);
+
+  if(isFiller){
+    fatigue.lastWhy = '⚡ continuity filler (network) — not a rest break';
+    const el=$('breakWhy'); if(el) el.textContent = fatigue.lastWhy;
+  }
+  return out;
+};
+
+const _ebFix = endBreak;
+endBreak = function(){
+  const wasFiller = fix.breakWasFiller;
+  const snap = fix.sinceBreakSnap;
+  const out = _ebFix.apply(this, arguments);
+  if(wasFiller){
+    fatigue.sinceBreak = snap;                       // a buffering hop is NOT a rest
+    breaksTaken = Math.max(0, breaksTaken - 1);
+  }
+  fix.breakWasFiller = false;
+  fix.cardPending = false;
+  auto.paused = false;                               // never leave autopilot latched
+  if(auto.on) scheduleAutoFallback();
+  renderFatigue(); renderBreakState(); renderCont();
+  return out;
+};
+
+/* ============================================================
+   FIX 4 — forward progress: loop credit survives a resume, grades pressed
+   during a break/hold are honoured, and a watchdog guarantees motion
+   ============================================================ */
+const _pcFix = playCurrent;
+playCurrent = function(){
+  const sameCard = !!(current && auto.cardIdx === current.idx);
+  const keep = sameCard ? auto.passes : 0;
+  const out = _pcFix.apply(this, arguments);
+  fix.seekAt = Date.now();
+  fix.advWinAt = 0; fix.advRate = effRate;
+  if(current){
+    if(auto.cardIdx !== current.idx){ auto.cardIdx = current.idx; fix.cardSince = Date.now(); auto.passes = 0; }
+    else { auto.passes = keep; }                     // a resume must not erase loop credit
+  }
+  renderAutoChip();
+  return out;
+};
+
+const _grFix = grade;
+grade = function(kind, isAuto){
+  if(breakActive){
+    const pending = fix.cardPending;
+    endBreak(true);
+    if(pending && current && Q[kind]) return grade(kind, isAuto);   // your keypress still counts
+    return;
+  }
+  if(cont.active){
+    cont.backoff = 0;
+    releaseContinuity();
+    if(current && Q[kind]) return grade(kind, isAuto);
+    return;
+  }
+  return _grFix.apply(this, arguments);
+};
+
+/* watchdog — autopilot can never be stranded on one card */
+setInterval(()=>{
+  if(!auto.on || !current || breakActive || cont.active) return;
+  let st=-1; try{ st=player.getPlayerState(); }catch(_){}
+  if(st===YT.PlayerState.PAUSED) return;              // you paused on purpose: hold
+  if(!fix.cardSince) fix.cardSince = Date.now();
+  const {from,to} = loopBounds();
+  const span = Math.max(2, to-from);
+  const budget = (auto.loops * span / Math.max(0.25, effRate))*1000 + 15000;
+  if(Date.now() - fix.cardSince > budget){
+    auto.paused = false;
+    fix.cardSince = Date.now();
+    fireAuto();
+  }
+}, 1000);
+
+/* ============================================================
+   FIX 5 — honest labelling of what the shield is doing
+   ============================================================ */
+const _rcFix = renderCont;
+renderCont = function(){
+  const out = _rcFix.apply(this, arguments);
+  if(cont.active && fix.selfFiller){
+    const el=$('cLabel');
+    if(el) el.textContent = `⚡ self-filler — looping the buffered head of #${cont.holdIdx+1}; card held, not graded`;
+  }
+  const cl=$('contLine');
+  if(cl) cl.textContent = `continuity saves ${cont.saves} · warm ${cont.warm.size} · break slices cached ${bWarm.length} · network fillers ${fix.fillerBreaks}`;
+  return out;
+};
+
+readContUI(); renderCont(); renderFatigue();
+toast('✅ Stability patch active — false break storm disabled, min-gap enforced.');
+console.log('[LoopRep] Layer 4 stability patch loaded.');
+
+  
 </script>
 </body>
 </html>
