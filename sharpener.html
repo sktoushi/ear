@@ -1,15 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LoopRep — Spaced-Repetition Video Segment Trainer</title>
 <style>
   :root{
     --bg:#0f1220; --panel:#171b2e; --panel2:#1e2440; --line:#2a3154;
     --text:#e9ecf6; --muted:#98a0c0; --accent:#6c8cff; --accent2:#8b5cf6;
     --again:#ef4444; --hard:#f59e0b; --good:#22c55e; --easy:#38bdf8;
-    --a:#f472b6; --b:#34d399; --auto:#fbbf24; --brk:#22d3ee; --radius:14px;
+    --a:#f472b6; --b:#34d399; --auto:#fbbf24; --brk:#22d3ee; --warm:#fb923c;
+    --lib:#a78bfa; --radius:14px;
   }
   *{box-sizing:border-box}
   body{
@@ -23,7 +24,7 @@
   .wrap{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);gap:18px}
   @media(max-width:900px){.wrap{grid-template-columns:1fr}}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
-  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 12px;display:flex;justify-content:space-between;align-items:center}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;gap:10px}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   input,select,button{font:inherit}
   input[type=text],input[type=number],select{
@@ -55,9 +56,18 @@
   .break-bar{position:absolute;left:0;right:0;bottom:0;z-index:6;display:flex;gap:8px;align-items:center;flex-wrap:wrap;
     padding:8px 10px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.8));font-size:12px}
   .break-bar .lab{color:#cbd5e1}
-  /* progress + A/B track under player */
+  /* ── continuity (buffer shield) ── */
+  body.continuity #player-box{animation:none;box-shadow:0 0 0 2px var(--warm),0 0 24px -4px var(--warm)}
+  #contBadge{position:absolute;left:10px;top:10px;z-index:7;display:none;align-items:center;gap:8px;
+    padding:6px 11px;border-radius:99px;font-size:12px;font-weight:600;
+    background:rgba(11,14,24,.82);border:1px solid var(--warm);color:#ffedd5;backdrop-filter:blur(4px)}
+  #contBadge.show{display:flex}
+  #contBadge .blip{width:8px;height:8px;border-radius:50%;background:var(--warm);animation:blip 1s ease-in-out infinite}
+  @keyframes blip{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+  /* progress + AB track under player */
   .track{position:relative;height:10px;margin-top:10px;background:var(--panel2);border:1px solid var(--line);border-radius:99px;overflow:hidden;cursor:pointer}
   .track>.seg{position:absolute;top:0;bottom:0;background:linear-gradient(90deg,var(--accent),var(--accent2));opacity:.55}
+  .track>.buf{position:absolute;top:0;bottom:0;left:0;background:rgba(251,146,60,.20)}
   .track>.play{position:absolute;top:-3px;width:3px;height:16px;background:#fff;border-radius:2px}
   .track>.mk{position:absolute;top:-4px;width:2px;height:18px}
   .track>.mkA{background:var(--a)} .track>.mkB{background:var(--b)}
@@ -84,6 +94,8 @@
   .chip b{color:var(--text)}
   .chip.on{border-color:var(--auto);color:var(--text)}
   .chip.brk{border-color:var(--brk);color:var(--text)}
+  .chip.warm{border-color:var(--warm);color:var(--text)}
+  .chip.lib{border-color:var(--lib);color:var(--text)}
   .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
   .stat{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
   .stat .n{font-size:20px;font-weight:700}
@@ -99,61 +111,90 @@
   .qitem .tags{margin-left:auto;display:flex;gap:6px;font-size:11px;color:var(--muted)}
   .pill{background:#0b0e18;border:1px solid var(--line);padding:2px 6px;border-radius:99px}
   .pill.auto{border-color:var(--auto);color:var(--auto)}
+  .pill.warm{border-color:var(--warm);color:var(--warm)}
   .opts{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:12px;color:var(--muted);font-size:13px}
   .opts label{display:flex;gap:6px;align-items:center;cursor:pointer}
   .opts input[type=number]{width:64px;padding:5px 8px}
   .opts select{padding:5px 8px}
   .autorow{margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--panel2);border:1px dashed var(--line)}
   body.autopilot .autorow{border-color:var(--auto)}
-  /* gauges for the break layer */
+  /* gauges for the break + continuity layers */
   .gauge-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-top:12px}
   .gauge{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
   .gauge label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
   .gauge b{color:var(--text);text-transform:none;letter-spacing:0;font-size:12px}
   .gauge input[type=range]{width:100%;accent-color:var(--brk);cursor:pointer}
+  .gauge.w input[type=range]{accent-color:var(--warm)}
   .hint{color:var(--muted);font-size:12px;line-height:1.5;margin-top:10px}
   .mastery{margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);font-size:12px;color:var(--muted)}
   .mastery b{color:var(--text)}
   .mbar{height:6px;background:#0b0e18;border-radius:99px;overflow:hidden;margin-top:6px}
   .mbar>i{display:block;height:100%;background:linear-gradient(90deg,var(--hard),var(--good));width:0%;transition:width .3s}
   .fbar>i{background:linear-gradient(90deg,var(--good),var(--hard),var(--again))}
+  .cbar>i{background:linear-gradient(90deg,var(--again),var(--hard),var(--good))}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:10px;opacity:0;transition:.3s;pointer-events:none;z-index:9}
   .toast.show{opacity:1}
   code{background:#0b0e18;padding:1px 5px;border-radius:5px;color:#c7d2fe}
   details{margin-top:12px}
   summary{cursor:pointer;color:var(--accent);font-size:13px}
   .save-dot{font-size:11px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0}
+  /* session library */
+  #libSel{flex:1;min-width:240px;max-width:100%}
+  .libmeta{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
+  .libmeta b{color:var(--text)}
 </style>
 </head>
 <body>
 <h1><span>LoopRep</span> — Spaced-Repetition Video Segment Trainer</h1>
-<div class="sub">Chop any YouTube video into fixed-length segments and drill them with an Anki-style (SM-2) scheduler. Progress persists across reloads; when comprehension trends high the session auto-resets for endless drilling. <b>Auto mode</b> can fly the session for you — interrupt any time and your own grade is what counts. <b>Break video</b> + <b>fatigue forecast</b> slip a rest slice in between cards before you burn out.</div>
+<div class="sub">Chop any YouTube video into fixed-length segments and drill them with an Anki-style (SM-2) scheduler. Progress persists across reloads; when comprehension trends high the session auto-resets for endless drilling. <b>Auto mode</b> can fly the session for you — interrupt any time and your own grade is what counts. <b>Break video</b> + <b>fatigue forecast</b> slip a rest slice in between cards before you burn out. <b>Saved sessions</b> remember every video you have drilled, and the <b>continuity shield</b> keeps sound flowing by hopping to an already-buffered segment the moment the network stutters.</div>
 
 <div class="wrap">
   <!-- LEFT: player + controls -->
   <div style="display:flex;flex-direction:column;gap:18px">
+
+    <!-- ── NEW: saved listening sessions ─────────────────────────── -->
+    <div class="card">
+      <h2>0 · Saved listening sessions <span class="save-dot" id="libCount">—</span></h2>
+      <div class="row">
+        <select id="libSel" title="Every video you have sliced is saved here — pick one instead of hunting for the URL">
+          <option value="">— no saved sessions yet —</option>
+        </select>
+        <button id="libOpen" class="btn primary" disabled>Open ▸</button>
+        <button id="libRefresh" class="btn sm ghost" title="Re-read the library from IndexedDB">⟳</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="libSave" class="btn sm" disabled title="Save the current session and give it a name">💾 Save &amp; name</button>
+        <button id="libRename" class="btn sm ghost" disabled>✎ Rename</button>
+        <button id="libDelete" class="btn sm ghost" disabled>🗑 Delete</button>
+        <button id="libExportAll" class="btn sm ghost" disabled title="Download every saved session as one JSON backup">⇩ Backup all</button>
+        <span class="chip lib" id="libChip">library —</span>
+      </div>
+      <div class="libmeta" id="libMeta">Pick a session to see its details. Sessions are keyed by <b>video + segment length</b>, so the same video sliced at 10s and 15s are two separate entries.</div>
+    </div>
+
     <div class="card">
       <h2>1 · Load video &amp; slice</h2>
       <div class="row">
-        <input id="url" type="text" placeholder="Paste a YouTube URL or ID (e.g. https://youtu.be/dQw4w9WgXcQ)" />
+        <input id="url" type="text" list="urlHints" placeholder="Paste a YouTube URL or ID (e.g. https://youtu.be/dQw4w9WgXcQ)">
+        <datalist id="urlHints"></datalist>
         <label class="hint" style="margin:0">Segment&nbsp;length</label>
-        <input id="seg" type="number" min="2" max="600" step="1" value="15" /> <span class="hint">sec</span>
+        <input id="seg" type="number" min="2" max="600" step="1" value="15"> <span class="hint">sec</span>
         <button id="loadBtn" class="btn primary">Load &amp; Slice</button>
       </div>
       <div class="opts">
-        <label><input id="cumulative" type="checkbox" /> Cumulative playback</label>
-        <label><input id="autoloop" type="checkbox" checked /> Loop until graded</label>
-        <label><input id="autoreset" type="checkbox" checked /> Infinite auto-reset on mastery</label>
-        <label title="Original behaviour: each loop pass picks a random rate. Uncheck to obey the Speed selector."><input id="randSpeed" type="checkbox" checked /> Random loop speed</label>
+        <label><input id="cumulative" type="checkbox"> Cumulative playback</label>
+        <label><input id="autoloop" type="checkbox" checked> Loop until graded</label>
+        <label><input id="autoreset" type="checkbox" checked> Infinite auto-reset on mastery</label>
+        <label title="Original behaviour: each loop pass picks a random rate. Uncheck to obey the Speed selector."><input id="randSpeed" type="checkbox" checked> Random loop speed</label>
       </div>
 
-      <!-- ── NEW: autopilot ────────────────────────────────────────── -->
+      <!-- ── autopilot ────────────────────────────────────────────── -->
       <div class="autorow">
         <div class="opts" style="margin:0">
           <label style="color:var(--text);font-weight:600">
-            <input id="autoMode" type="checkbox" /> 🤖 Auto mode (autopilot)
+            <input id="autoMode" type="checkbox"> 🤖 Auto mode (autopilot)
           </label>
-          <label>after <input id="autoLoops" type="number" min="1" max="20" step="1" value="2" /> loop pass(es)</label>
+          <label>after <input id="autoLoops" type="number" min="1" max="20" step="1" value="2"> loop pass(es)</label>
           <label>bias
             <select id="autoBias">
               <option value="balanced" selected>Balanced</option>
@@ -167,44 +208,44 @@
         <div class="hint" style="margin-top:8px">
           The site rolls a random grade for you and keeps the session rolling. <b>Grade manually at any moment</b> — your
           choice cancels the pending roll, counts as your own review, and autopilot simply resumes on the next segment.
-          Untick the box to stop immediately. Autopilot reviews are tagged and excluded from Retention / mastery, so only
+          Untick the box to stop immediately. Autopilot reviews are tagged and excluded from Retention mastery, so only
           <b>your</b> answers shape the honest numbers.
         </div>
       </div>
     </div>
 
-    <!-- ── NEW: break video + fatigue forecast ───────────────────── -->
+    <!-- ── break video + fatigue forecast ────────────────────────── -->
     <div class="card">
       <h2>1b · Break video &amp; fatigue forecast <span class="save-dot" id="bState">no break video</span></h2>
       <div class="row">
-        <input id="bUrl" type="text" placeholder="Optional second YouTube URL or ID — played during breaks" />
+        <input id="bUrl" type="text" placeholder="Optional second YouTube URL or ID — played during breaks">
         <button id="bLoadBtn" class="btn">Add break video</button>
         <button id="bClearBtn" class="btn ghost sm">Remove</button>
       </div>
       <div class="opts">
-        <label style="color:var(--text);font-weight:600"><input id="bEnable" type="checkbox" checked /> ☕ Break when fatigue is forecast</label>
+        <label style="color:var(--text);font-weight:600"><input id="bEnable" type="checkbox" checked> ☕ Break when fatigue is forecast</label>
         <label title="The break video always starts at 1× and never uses the random loop speed. Change it here whenever you like.">
-          Break speed <input id="bSpeed" type="number" min="0.25" max="2" step="0.05" value="1" />×
+          Break speed <input id="bSpeed" type="number" min="0.25" max="2" step="0.05" value="1">×
         </label>
-        <label><input id="bLoop" type="checkbox" /> loop the break slice</label>
+        <label><input id="bLoop" type="checkbox"> loop the break slice</label>
         <span class="chip brk" id="bChip">break slice —</span>
       </div>
       <div class="gauge-row">
         <div class="gauge">
           <label>Break slice length <b id="bSliceLbl">1.00× · —</b></label>
-          <input id="bSliceMul" type="range" min="0.25" max="4" step="0.25" value="1" />
+          <input id="bSliceMul" type="range" min="0.25" max="4" step="0.25" value="1">
         </div>
         <div class="gauge">
           <label>Fatigue trigger <b id="fThreshLbl">70%</b></label>
-          <input id="fThresh" type="range" min="30" max="95" step="5" value="70" />
+          <input id="fThresh" type="range" min="30" max="95" step="5" value="70">
         </div>
         <div class="gauge">
           <label>Min reviews between breaks <b id="fGapLbl">4</b></label>
-          <input id="fGap" type="range" min="1" max="20" step="1" value="4" />
+          <input id="fGap" type="range" min="1" max="20" step="1" value="4">
         </div>
         <div class="gauge">
           <label>Fatigue sensitivity <b id="fSensLbl">normal</b></label>
-          <input id="fSens" type="range" min="1" max="5" step="1" value="3" />
+          <input id="fSens" type="range" min="1" max="5" step="1" value="3">
         </div>
       </div>
       <div class="mastery fbar">
@@ -235,10 +276,70 @@
       </details>
     </div>
 
+    <!-- ── NEW: continuity shield ────────────────────────────────── -->
+    <div class="card">
+      <h2>1c · Continuity shield (pre-emptive buffer hop) <span class="save-dot" id="cState">idle</span></h2>
+      <div class="opts" style="margin-top:0">
+        <label style="color:var(--text);font-weight:600"><input id="cOn" type="checkbox" checked> ⚡ Hop to a warm segment when buffering is detected</label>
+        <label title="When no warm segment exists yet, roll the break video instead so sound never dies."><input id="cUseBreak" type="checkbox" checked> break video as last-resort filler</label>
+        <label title="Apply the same shield to the break video itself."><input id="cBreakShield" type="checkbox" checked> shield the break video too</label>
+        <span class="chip warm" id="cChip">shield idle</span>
+      </div>
+      <div class="gauge-row">
+        <div class="gauge w">
+          <label>Stall grace before hopping <b id="cGraceLbl">900 ms</b></label>
+          <input id="cGrace" type="range" min="300" max="3000" step="100" value="900">
+        </div>
+        <div class="gauge w">
+          <label>Pre-emptive buffer headroom <b id="cHeadLbl">2.0 s</b></label>
+          <input id="cHead" type="range" min="0" max="8" step="0.5" value="2">
+        </div>
+        <div class="gauge w">
+          <label>Warm segments kept <b id="cKeepLbl">8</b></label>
+          <input id="cKeep" type="range" min="2" max="30" step="1" value="8">
+        </div>
+        <div class="gauge w">
+          <label>First retry after <b id="cHoldLbl">6 s</b></label>
+          <input id="cHold" type="range" min="3" max="30" step="1" value="6">
+        </div>
+      </div>
+      <div class="mastery cbar">
+        <div>Network health: <b id="cLabel">—</b> <span id="cDetail"></span></div>
+        <div class="mbar"><i id="cBar"></i></div>
+      </div>
+      <details>
+        <summary>How the pre-emptive switch protects the flow</summary>
+        <div class="hint">
+          Every segment you actually finish a loop pass on is registered as <b>warm</b> — it has just been decoded, so the
+          player very likely still holds it. The shield watches two signals at 200&nbsp;ms resolution:
+          <b>(1) a hard stall</b> — <code>getCurrentTime()</code> stops advancing while the state is
+          <code>PLAYING</code>/<code>BUFFERING</code> for longer than your grace window — and <b>(2) a pre-emptive
+          signal</b> — <code>getVideoLoadedFraction()</code> projected against the playhead shows less than your
+          headroom of buffer left, i.e. a stall is <i>about</i> to happen. Either one fires the hop.
+          <br><br>
+          On a hop, the <b>current card is held, never graded and never re-scheduled</b>: SM-2 state, EF, interval and
+          due-step are all frozen exactly as they were. The player jumps to the most recently warmed segment (preferring
+          one that still sits inside the reported buffered range), loops it, disables the grade buttons and holds
+          autopilot — so the room stays full of the target language instead of a spinner. After the retry delay the
+          shield seeks back to the real card and <b>probes</b> it for 2.5&nbsp;s; if it stalls again the hold doubles
+          (exponential backoff, capped at 60&nbsp;s) and the filler resumes. A clean probe resets the backoff and hands
+          straight back to the untouched <code>playCurrent()</code>.
+          <br><br>
+          The same logic guards the <b>break video</b>: completed break slices are remembered, and a stalling break jumps
+          to a previous slice rather than freezing your rest. Because the review player is paused during a break, it
+          quietly buffers ahead the whole time — breaks and the shield reinforce each other.
+          Keys: <code>c</code> toggle shield · <code>Esc</code> force-return to the real segment.
+          URL params: <code>cs</code>, <code>cgrace</code>, <code>chead</code>, <code>cbreak</code>.
+        </div>
+      </details>
+    </div>
+
     <div class="card">
       <h2>2 · Review</h2>
       <div id="player-box">
         <div id="player"></div>
+        <!-- continuity badge -->
+        <div id="contBadge"><span class="blip"></span><span id="contBadgeTxt">⚡ continuity</span></div>
         <!-- break overlay: separate player, only visible during a break -->
         <div id="break-layer">
           <div id="breakPlayer"></div>
@@ -252,8 +353,9 @@
         </div>
       </div>
 
-      <!-- scrub + A/B track (click to seek) -->
+      <!-- scrub + AB track (click to seek) -->
       <div class="track" id="track" title="Click to seek">
+        <div class="buf" id="tBuf"></div>
         <div class="seg" id="tSeg"></div>
         <div class="abfill" id="tAB" style="display:none"></div>
         <div class="mk mkA" id="tA" style="display:none"></div>
@@ -261,13 +363,13 @@
         <div class="play" id="tPlay"></div>
       </div>
 
-      <!-- A/B + speed toolbar -->
+      <!-- AB + speed toolbar -->
       <div class="toolbar">
-        <span class="lab">A/B loop</span>
+        <span class="lab">AB loop</span>
         <button id="setA" class="btn sm" disabled>Set A</button>
         <button id="setB" class="btn sm" disabled>Set B</button>
         <button id="clrAB" class="btn sm ghost" disabled>Clear</button>
-        <label class="opts" style="margin:0"><input id="abOn" type="checkbox" disabled> use A/B</label>
+        <label class="opts" style="margin:0"><input id="abOn" type="checkbox" disabled> use AB</label>
         <span class="chip" id="abChip">A — · B —</span>
         <span class="lab" style="margin-left:auto">Speed</span>
         <select id="speed">
@@ -295,7 +397,7 @@
         <button class="grade good" data-q="good" disabled>Good<small>ok</small></button>
         <button class="grade easy" data-q="easy" disabled>Easy<small>trivial</small></button>
       </div>
-      <div class="hint">Keys: <code>Space</code> replay · <code>1-4</code> grade · <code>a</code>/<code>b</code> set A/B · <code>x</code> clear A/B · <code>[</code>/<code>]</code> speed · <code>m</code> auto mode · <code>p</code> pause · <code>u</code> undo · <code>k</code> break</div>
+      <div class="hint">Keys: <code>Space</code> replay · <code>1-4</code> grade · <code>a</code>/<code>b</code> set AB · <code>x</code> clear AB · <code>[</code>/<code>]</code> speed · <code>m</code> auto mode · <code>p</code> pause · <code>u</code> undo · <code>k</code> break · <code>c</code> continuity shield</div>
 
       <div class="mastery">
         <div>Mastery signal: <b id="mLabel">—</b> <span id="mDetail"></span></div>
@@ -342,6 +444,7 @@
       </div>
       <div class="hint" id="splitLine" style="margin-top:-4px">manual 0 · autopilot 0</div>
       <div class="hint" id="breakLine" style="margin-top:2px">breaks 0 · 0s rested</div>
+      <div class="hint" id="contLine" style="margin-top:2px">continuity saves 0 · warm 0</div>
       <div class="row" style="margin-top:10px">
         <button id="resetBtn" class="btn sm" disabled>↺ Reset round</button>
         <button id="wipeBtn" class="btn sm ghost" disabled>🗑 Clear saved</button>
@@ -363,9 +466,10 @@
 <script>
 /* ============================================================
    LoopRep — SRS YouTube segment trainer
-   + IndexedDB persistence + A/B loop + speed + infinite auto-reset
+   + IndexedDB persistence + AB loop + speed + infinite auto-reset
    + AUTO MODE (autopilot): random grades, interruptible, manual wins
-   + BREAK VIDEO + LEARNING-FATIGUE FORECAST (additive layer, bottom)
+   + BREAK VIDEO + LEARNING-FATIGUE FORECAST (additive layer)
+   + SESSION LIBRARY + CONTINUITY SHIELD (additive layers, bottom)
    ============================================================ */
 
 /* ---------- State ---------- */
@@ -511,7 +615,7 @@ function parseVideoId(input){
 
 /* ---------- URL params autoload ---------- */
 function applyUrlParams(){
-  // Read from ?query (works over http) AND #hash (works even on local file://).
+  // Read from ?query (works over http) AND #hash (works even on local file:).
   const p=new URLSearchParams(location.search);
   const h=new URLSearchParams((location.hash||'').replace(/^#/,''));
   const g=(k)=> p.get(k) ?? h.get(k);
@@ -624,7 +728,7 @@ function pickNext(){
   if(pool.length===0){ current=null; onAllLearned(); return; }
   pool.sort((a,b)=>a.dueStep-b.dueStep||a.idx-b.idx);
   current=pool[0];
-  ab={a:null,b:null,on:false};        // A/B markers are per-segment: clear on each new card
+  ab={a:null,b:null,on:false};        // AB markers are per-segment: clear on each new card
   $('abOn').checked=false; applyAbUI();
   playCurrent();
 }
@@ -724,7 +828,7 @@ function scheduleAutoFallback(){
 function noteLoopPass(){
   const now=Date.now();
   /* Debounce duplicate detections, but scale the guard to the loop length so
-     very short A/B loops (or high rates) still get counted honestly. */
+     very short AB loops (or high rates) still get counted honestly. */
   const {from,to}=loopBounds();
   const guard=Math.max(60,Math.min(350,(to-from)*1000*0.3/Math.max(0.25,effRate)));
   if(now-auto.lastWrap<guard) return;
@@ -809,7 +913,7 @@ function autoReset(reason){
 }
 
 /* ============================================================
-   Playback + A/B + speed
+   Playback + AB + speed
    ============================================================ */
 function segFrom(){ return $('cumulative').checked ? 0 : current.start; }
 function loopBounds(){
@@ -853,7 +957,7 @@ $('track').addEventListener('click',e=>{
   try{ player.seekTo(pct*duration,true); }catch(_){}
 });
 
-/* A/B markers */
+/* AB markers */
 $('setA').addEventListener('click',()=>{ ab.a=player.getCurrentTime(); if(ab.b!=null&&ab.a>ab.b){const t=ab.a;ab.a=ab.b;ab.b=t;} ab.on=true; $('abOn').checked=true; applyAbUI(); playCurrent(); scheduleSave(); });
 $('setB').addEventListener('click',()=>{ ab.b=player.getCurrentTime(); if(ab.a!=null&&ab.b<ab.a){const t=ab.a;ab.a=ab.b;ab.b=t;} ab.on=true; $('abOn').checked=true; applyAbUI(); playCurrent(); scheduleSave(); });
 $('clrAB').addEventListener('click',()=>{ ab={a:null,b:null,on:false}; $('abOn').checked=false; applyAbUI(); playCurrent(); scheduleSave(); });
@@ -872,7 +976,7 @@ $('resetBtn').addEventListener('click',()=>{ if(cards.length){ autoReset('manual
 $('wipeBtn').addEventListener('click',async()=>{
   if(!videoId) return;
   if(!confirm('Delete the saved state for this video + segment length?')) return;
-  clearTimeout(saveTimer);                        // don't let a queued save resurrect it
+  clearTimeout(saveTimer);                       // don't let a queued save resurrect it
   await idbDel(keyFor(videoId,segLen));
   toast('Saved session cleared.'); setDot('not saved');
 });
@@ -993,7 +1097,7 @@ function finishSession(){
   toast('Session complete!');
 }
 
-/* live playhead + A/B markers on the track */
+/* live playhead + AB markers on the track */
 function startUiLoop(){
   clearInterval(uiTimer);
   uiTimer=setInterval(()=>{
@@ -1025,12 +1129,12 @@ window.addEventListener('beforeunload',()=>{ try{ persist(); }catch(_){} });
 document.addEventListener('visibilitychange',()=>{ if(document.hidden) stopAutopilotTimers(); else scheduleAutoFallback(); });
 
 /* ============================================================================
-   ============================  ADDITIVE LAYER  ==============================
+   ============================  ADDITIVE LAYER 1  ============================
    BREAK VIDEO (second player, 1× by default) + LEARNING-FATIGUE FORECAST
    ----------------------------------------------------------------------------
    Design rules honoured here:
      · The SM-2 scheduler, its stats, autopilot and every existing function body
-       above are LEFT AS THEY WERE. This layer only *wraps* four of them
+       above are LEFT AS THEY WERE. This layer only *wraps* a few of them
        (pickNext / playCurrent / grade / buildOrRestore / sessionRecord /
        applyUrlParams) so a break can be slipped in BETWEEN two cards.
      · A break never happens mid-card, so no card's interval, EF or dueStep is
@@ -1322,10 +1426,10 @@ applyUrlParams=function(){
   return out;
 };
 function breakLinkParams(){
-  if(!bVideoId) return `&bmul=${fatigue.mul}&bthresh=${fatigue.thresh}&bgap=${fatigue.gap}&bsens=${fatigue.sens}`;
+  if(!bVideoId) return `&bmul=${fatigue.mul}&bthresh=${fatigue.thresh}&bgap=${fatigue.gap}&bsens=${fatigue.sens}`+contLinkParams();
   return `&bv=${bVideoId}&bmul=${fatigue.mul}&bspeed=${parseFloat($('bSpeed').value)||1}`+
          `&bthresh=${fatigue.thresh}&bgap=${fatigue.gap}&bsens=${fatigue.sens}`+
-         `&breaks=${$('bEnable').checked?1:0}&bloop=${$('bLoop').checked?1:0}`;
+         `&breaks=${$('bEnable').checked?1:0}&bloop=${$('bLoop').checked?1:0}`+contLinkParams();
 }
 
 /* ---------- gauges + rendering ---------- */
@@ -1408,6 +1512,563 @@ document.addEventListener('keydown',e=>{
 /* ---------- break-layer boot ---------- */
 try{ const bl=localStorage.getItem('looprep:breakUrl'); if(bl&&!$('bUrl').value) $('bUrl').value=bl; }catch(_){}
 readGauges(); renderFatigue(); renderBreakState();
+
+/* ============================================================================
+   ============================  ADDITIVE LAYER 2  ============================
+   SESSION LIBRARY — "I forgot the URL" insurance
+   ----------------------------------------------------------------------------
+   Every sliced session is ALREADY persisted to IndexedDB under `videoId|segLen`.
+   This layer simply *reads the whole store back out*, names it, and puts it in a
+   picker. Nothing in the scheduler is touched: opening a library entry is exactly
+   the same code path as typing the URL by hand (it fills the fields and calls the
+   original startLoad(), which then restores the saved SM-2 state as always).
+   ============================================================================ */
+
+let sessLabel='', sessCreated=0, videoTitle='', bVideoTitle='';
+let libRows=[], libBusy=false, libTimer=null;
+
+function idbAll(){
+  return new Promise(res=>{
+    if(!DB.db) return res([]);
+    try{
+      const tx=DB.db.transaction(DB.store,'readonly');
+      const rq=tx.objectStore(DB.store).getAll();
+      rq.onsuccess=()=>res(rq.result||[]);
+      rq.onerror=()=>res([]);
+    }catch(_){ res([]); }
+  });
+}
+/* YouTube hands us the real titles once a player has data — grab them opportunistically. */
+function captureTitles(){
+  try{ const d=player&&player.getVideoData&&player.getVideoData(); if(d&&d.title) videoTitle=d.title; }catch(_){}
+  try{ const d=bPlayer&&bPlayer.getVideoData&&bPlayer.getVideoData(); if(d&&d.title) bVideoTitle=d.title; }catch(_){}
+}
+function ago(ts){
+  if(!ts) return 'never';
+  const s=Math.max(0,(Date.now()-ts)/1000);
+  if(s<60) return 'just now';
+  if(s<3600) return Math.round(s/60)+'m ago';
+  if(s<86400) return Math.round(s/3600)+'h ago';
+  if(s<604800) return Math.round(s/86400)+'d ago';
+  return new Date(ts).toLocaleDateString();
+}
+const curKey=()=> (videoId?keyFor(videoId,segLen):'');
+function libName(r){ return (r.label&&r.label.trim()) || (r.title&&r.title.trim()) || r.videoId || r.key; }
+function libOptionText(r){
+  const tot=(r.cards||[]).length, learned=(r.cards||[]).filter(c=>c.done).length;
+  const mark=(r.key===curKey())?'● ':'';
+  const brk=(r.breakVideo&&r.breakVideo.id)?' · ☕':'';
+  return `${mark}${libName(r)} · ${r.segLen}s · R${r.round||1} · ${learned}/${tot}${brk} · ${ago(r.updatedAt)}`;
+}
+async function refreshLibrary(selectKey){
+  if(libBusy) return; libBusy=true;
+  const rows=await idbAll();
+  libBusy=false;
+  libRows=rows.filter(r=>r&&r.videoId).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  const sel=$('libSel');
+  const want=selectKey||sel.value||curKey();
+  sel.innerHTML = libRows.length
+    ? libRows.map(r=>`<option value="${r.key}">${libOptionText(r).replace(/</g,'&lt;')}</option>`).join('')
+    : '<option value="">— no saved sessions yet —</option>';
+  if(want && libRows.some(r=>r.key===want)) sel.value=want;
+  $('libCount').textContent = libRows.length ? `${libRows.length} saved` : 'empty';
+  $('libChip').textContent  = libRows.length
+    ? `library ${libRows.length} · ${libRows.filter(r=>r.breakVideo&&r.breakVideo.id).length} with break video`
+    : 'library empty';
+  // URL autocomplete hints, so the raw box also remembers for you
+  $('urlHints').innerHTML=libRows.map(r=>`<option value="${r.videoId}">${libName(r).replace(/</g,'&lt;')}</option>`).join('');
+  $('libExportAll').disabled=!libRows.length;
+  renderLibMeta();
+  updateLibButtons();
+}
+function libSelected(){ const k=$('libSel').value; return libRows.find(r=>r.key===k)||null; }
+function updateLibButtons(){
+  const r=libSelected();
+  $('libOpen').disabled=!r;
+  $('libRename').disabled=!r;
+  $('libDelete').disabled=!r;
+  $('libSave').disabled=!(videoId&&cards.length);
+}
+function renderLibMeta(){
+  const r=libSelected(), el=$('libMeta');
+  if(!el) return;
+  if(!r){ el.innerHTML='Nothing saved yet — load a video below and it lands here automatically.'; return; }
+  const tot=(r.cards||[]).length, learned=(r.cards||[]).filter(c=>c.done).length;
+  const f=r.fatigueState||{};
+  el.innerHTML=
+    `<b>${libName(r)}</b> — <code>${r.videoId}</code> · slice <b>${r.segLen}s</b> · ${tot} segments · `+
+    `<b>${learned}</b> learned · round <b>${r.round||1}</b> · ${r.totalReviews||0} all-time reviews`+
+    (r.title&&r.label?`<br><span style="opacity:.8">${r.title.replace(/</g,'&lt;')}</span>`:'')+
+    `<br>break video: <b>${(r.breakVideo&&r.breakVideo.id)?r.breakVideo.id:'none'}</b>`+
+    (f.breaksTaken?` · ${f.breaksTaken} breaks (${Math.round(f.breakSecs||0)}s)`:'')+
+    ` · last opened ${ago(r.updatedAt)}`;
+}
+async function openLibrarySession(){
+  const r=libSelected(); if(!r) return;
+  if(breakActive){ try{ endBreak(true); }catch(_){} }
+  sessLabel=r.label||''; sessCreated=r.createdAt||Date.now(); videoTitle=r.title||'';
+  $('url').value=r.videoId;
+  $('seg').value=String(r.segLen);
+  if(r.breakVideo&&r.breakVideo.id) $('bUrl').value=r.breakVideo.id;
+  startLoad();                                   // identical to typing the URL yourself
+  toast(`Opening “${libName(r)}” · ${r.segLen}s slices.`);
+}
+async function renameLibrarySession(){
+  const r=libSelected(); if(!r) return;
+  const name=prompt('Name this session (blank restores the video title):',libName(r));
+  if(name===null) return;
+  r.label=name.trim();
+  try{ await idbPut(r); }catch(_){}
+  if(r.key===curKey()) sessLabel=r.label;
+  await refreshLibrary(r.key);
+  toast(r.label?`Renamed to “${r.label}”.`:'Name cleared.');
+}
+async function deleteLibrarySession(){
+  const r=libSelected(); if(!r) return;
+  if(!confirm(`Delete the saved session “${libName(r)}” (${r.segLen}s)? SM-2 progress for it is lost.`)) return;
+  if(r.key===curKey()) clearTimeout(saveTimer);  // don't let a queued save resurrect it
+  await idbDel(r.key);
+  await refreshLibrary('');
+  toast('Session deleted from the library.');
+}
+async function saveAndName(){
+  if(!videoId||!cards.length) return;
+  captureTitles();
+  const name=prompt('Name this session:',sessLabel||videoTitle||videoId);
+  if(name===null) return;
+  sessLabel=name.trim();
+  clearTimeout(saveTimer);
+  await persist();
+  await refreshLibrary(curKey());
+  toast(sessLabel?`Saved as “${sessLabel}”.`:'Saved.');
+}
+$('libSel').addEventListener('change',()=>{ renderLibMeta(); updateLibButtons(); });
+$('libSel').addEventListener('dblclick',openLibrarySession);
+$('libOpen').addEventListener('click',openLibrarySession);
+$('libRefresh').addEventListener('click',()=>refreshLibrary());
+$('libRename').addEventListener('click',renameLibrarySession);
+$('libDelete').addEventListener('click',deleteLibrarySession);
+$('libSave').addEventListener('click',saveAndName);
+$('libExportAll').addEventListener('click',async()=>{
+  const rows=await idbAll();
+  if(!rows.length) return;
+  const blob=new Blob([JSON.stringify({app:'looprep',exportedAt:new Date().toISOString(),sessions:rows},null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`looprep-library-${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  toast(`Backed up ${rows.length} session(s).`);
+});
+
+/* --- wrappers: enrich the saved record, and keep the picker in sync --- */
+const _srLib=sessionRecord;
+sessionRecord=function(){
+  const r=_srLib();
+  captureTitles();
+  r.label=sessLabel||'';
+  r.title=videoTitle||r.title||'';
+  r.breakTitle=bVideoTitle||'';
+  r.createdAt=sessCreated||(sessCreated=Date.now());
+  return r;
+};
+
+const _persistLib=persist;
+persist=async function(){
+  const out=await _persistLib.apply(this,arguments);
+  clearTimeout(libTimer);
+  libTimer=setTimeout(()=>refreshLibrary(),600);   // the library always mirrors reality
+  return out;
+};
+
+const _borLib=buildOrRestore;
+buildOrRestore=async function(){
+  let saved=null;
+  try{ saved=await idbGet(keyFor(videoId,segLen)); }catch(_){}
+  if(saved){
+    sessLabel=saved.label||'';
+    sessCreated=saved.createdAt||Date.now();
+    if(saved.title&&!videoTitle) videoTitle=saved.title;
+    try{ applySavedContState(saved); }catch(_){}
+  }else{
+    sessLabel=''; sessCreated=Date.now();
+    videoTitle='';
+  }
+  const out=await _borLib.apply(this,arguments);
+  setTimeout(()=>{ captureTitles(); refreshLibrary(curKey()); },1200);
+  return out;
+};
+
+/* ============================================================================
+   ============================  ADDITIVE LAYER 3  ============================
+   CONTINUITY SHIELD — pre-emptive hop to an already-buffered segment
+   ----------------------------------------------------------------------------
+   Guarantees:
+     · The SM-2 card that is on screen is NEVER graded, re-scheduled or advanced
+       by a buffering event. It is *held*: EF, interval, dueStep and reps freeze.
+     · The filler is a segment you have already looped through in this session
+       (a "warm" segment), so the audio keeps flowing even while the network dies.
+     · The same shield guards the break video, using previously played break
+       slices as its warm pool.
+     · Return to the real card uses exponential backoff with a live probe, so a
+       genuinely dead connection never ping-pongs the player.
+   ============================================================================ */
+
+let contTimer=null, contLoopTimer=null;
+let bWarm=[];                                     // completed break slices {from,to}
+const cont={
+  on:true, useBreak:true, shieldBreak:true,
+  graceMs:900, head:2, keep:8, holdMs:6000,
+  active:false, holdIdx:null, origin:null, from:0, to:0,
+  lastT:-1, lastAdv:0, saves:0, hops:0, retryAt:0, backoff:0, probeUntil:0,
+  autoWas:false, warm:new Map(), lastEngage:0, viaBreak:false, health:100, headLast:Infinity,
+  bLastT:-1, bLastAdv:0, bLastSwitch:0, waiting:false
+};
+
+function readContUI(){
+  cont.on=$('cOn').checked;
+  cont.useBreak=$('cUseBreak').checked;
+  cont.shieldBreak=$('cBreakShield').checked;
+  cont.graceMs=Math.max(300,Math.min(3000,parseInt($('cGrace').value)||900));
+  cont.head=Math.max(0,Math.min(8,parseFloat($('cHead').value)||0));
+  cont.keep=Math.max(2,Math.min(30,parseInt($('cKeep').value)||8));
+  cont.holdMs=Math.max(3,Math.min(30,parseInt($('cHold').value)||6))*1000;
+  $('cGraceLbl').textContent=`${cont.graceMs} ms`;
+  $('cHeadLbl').textContent=cont.head?`${cont.head.toFixed(1)} s`:'off (stall only)';
+  $('cKeepLbl').textContent=String(cont.keep);
+  $('cHoldLbl').textContent=`${Math.round(cont.holdMs/1000)} s`;
+  trimWarm();
+  renderCont();
+}
+function trimWarm(){
+  while(cont.warm.size>cont.keep){
+    let oldestK=null,oldestAt=Infinity;
+    cont.warm.forEach((v,k)=>{ if(v.at<oldestAt){ oldestAt=v.at; oldestK=k; } });
+    if(oldestK==null) break;
+    cont.warm.delete(oldestK);
+  }
+}
+function markWarm(idx){
+  if(idx==null||!cards[idx]) return;
+  const w=cont.warm.get(idx)||{at:0,passes:0};
+  w.at=Date.now(); w.passes++;
+  cont.warm.set(idx,w);
+  trimWarm();
+}
+/* Heuristic: YouTube reports one buffered fraction for the whole video. */
+function loadedSecs(p,dur){
+  try{ const f=p&&p.getVideoLoadedFraction&&p.getVideoLoadedFraction();
+       if(typeof f==='number'&&f>0&&dur) return f*dur; }catch(_){}
+  return 0;
+}
+function pickWarm(excludeIdx){
+  const lt=loadedSecs(player,duration);
+  const arr=[...cont.warm.entries()]
+    .map(([idx,w])=>({idx,at:w.at}))
+    .filter(w=>w.idx!==excludeIdx&&cards[w.idx])
+    .sort((a,b)=>b.at-a.at);
+  if(!arr.length) return null;
+  const inBuffer=arr.filter(w=>lt>0&&cards[w.idx].end<=lt+0.5);
+  return inBuffer[0]||arr[0];
+}
+
+/* ---------- engage / release ---------- */
+function engageContinuity(reason,force){
+  if(!cont.on||cont.active||breakActive||!current) return;
+  if(!force&&Date.now()-cont.lastEngage<4000) return;                // anti-flap cooldown (never blocks a failed probe)
+  const w=pickWarm(current.idx);
+  if(!w){
+    /* nothing warm yet — fall back to the break video so silence never wins */
+    if(cont.useBreak&&breakReady()){
+      cont.viaBreak=true; cont.saves++; cont.lastEngage=Date.now();
+      fatigue.lastWhy='continuity filler — '+reason;
+      toast('⚡ Buffering and nothing warm yet — rolling the break video instead.');
+      startBreak(()=>{ cont.viaBreak=false; cont.lastT=-1; cont.lastAdv=Date.now(); playCurrent(); },true);
+      renderCont();
+      return;
+    }
+    cont.waiting=true; renderCont(); return;                        // just wait it out, badge only
+  }
+  cont.active=true; cont.saves++; cont.hops++; cont.waiting=false;
+  cont.lastEngage=Date.now();
+  cont.origin=loopBounds();
+  cont.holdIdx=w.idx;
+  const c=cards[w.idx];
+  cont.from=c.start; cont.to=c.end;
+  cont.backoff=cont.backoff?Math.min(60000,cont.backoff*2):cont.holdMs;
+  cont.retryAt=Date.now()+cont.backoff;
+  document.body.classList.add('continuity');
+  clearInterval(loopTimer);
+  stopAutopilotTimers();
+  cont.autoWas=auto.paused; auto.paused=true;                        // autopilot must not roll on filler
+  document.querySelectorAll('.grade').forEach(b=>{ b.dataset.cWas=b.disabled?'1':'0'; b.disabled=true; });
+  try{ player.seekTo(c.start,true); player.playVideo(); }catch(_){}
+  clearInterval(contLoopTimer);
+  contLoopTimer=setInterval(()=>{
+    if(!cont.active) return;
+    let t=cont.from; try{ t=player.getCurrentTime(); }catch(_){ return; }
+    if(t>=cont.to-0.15||t<cont.from-1){ try{ player.seekTo(cont.from,true); player.playVideo(); }catch(_){} }
+  },200);
+  toast(`⚡ ${reason} — holding the flow on warm segment #${w.idx+1} (card #${current.idx+1} frozen).`);
+  renderCont(); renderBanner();
+}
+function releaseContinuity(){
+  if(!cont.active) return;
+  cont.active=false;
+  clearInterval(contLoopTimer); contLoopTimer=null;
+  document.body.classList.remove('continuity');
+  document.querySelectorAll('.grade').forEach(b=>{
+    if(b.dataset.cWas!=null){ b.disabled=(b.dataset.cWas==='1'); delete b.dataset.cWas; }
+  });
+  auto.paused=cont.autoWas;
+  cont.lastT=-1; cont.lastAdv=Date.now();
+  renderCont();
+  playCurrent();                                    // untouched scheduler takes the wheel back
+}
+function probeReturn(){
+  if(!cont.active) return;
+  const idx=current?current.idx+1:'—';
+  releaseContinuity();
+  cont.probeUntil=Date.now()+2500;                  // watch closely: does it actually play?
+  toast(`↻ Probing segment #${idx} again…`);
+}
+
+/* ---------- detection loop (200 ms) ---------- */
+function contTick(){
+  readContHealthReset();
+  if(!cont.on){ renderCont(); return; }
+  const now=Date.now();
+  if(breakActive){ if(cont.shieldBreak) contBreakTick(now); renderCont(); return; }
+  if(!current||!player||!player.getCurrentTime) return;
+  let st=-1,t=0;
+  try{ st=player.getPlayerState(); t=player.getCurrentTime(); }catch(_){ return; }
+  if(t>cont.lastT+0.02){ cont.lastT=t; cont.lastAdv=now; }
+  const stalledFor=now-cont.lastAdv;
+  const lt=loadedSecs(player,duration);
+  const head=(lt>t)?(lt-t):Infinity;                // unknown → never pre-empt on headroom
+  cont.headLast=head;
+  if(duration&&lt){ const b=$('tBuf'); if(b) b.style.width=Math.min(100,lt/duration*100)+'%'; }
+
+  if(cont.active){
+    if(now>=cont.retryAt) probeReturn();
+    renderCont();
+    return;
+  }
+  if(st===YT.PlayerState.PAUSED||st===YT.PlayerState.CUED||st===YT.PlayerState.ENDED||st===-1){
+    cont.lastAdv=now; cont.waiting=false; renderCont(); return;      // user paused: not a stall
+  }
+  if(cont.probeUntil){
+    if(now<cont.probeUntil){
+      /* the probe is still running: a fresh stall means the network is still dead */
+      if(stalledFor>cont.graceMs){ cont.probeUntil=0; engageContinuity('probe failed — still buffering',true); return; }
+    }else if(stalledFor>cont.graceMs){
+      /* window closed but the playhead never moved: do NOT claim recovery */
+      cont.probeUntil=0; engageContinuity('probe failed — still buffering',true); return;
+    }else{
+      cont.probeUntil=0; cont.backoff=0;                            // genuinely playing again
+      toast(`▸ Buffer recovered — back on segment #${current.idx+1}.`);
+    }
+  }
+  const buffering=(st===YT.PlayerState.BUFFERING);
+  const hardStall=stalledFor>cont.graceMs;
+  const bufferStall=buffering&&stalledFor>cont.graceMs*0.6;
+  const needsMore=(loopBounds().to-t)>0.4;                          // still audio left to fetch
+  const preempt=cont.head>0&&isFinite(head)&&head<cont.head&&needsMore;
+  if(hardStall)        engageContinuity('playback stalled '+(stalledFor/1000).toFixed(1)+'s');
+  else if(bufferStall) engageContinuity('buffering');
+  else if(preempt)     engageContinuity('pre-empt: only '+head.toFixed(1)+'s buffered');
+  else cont.waiting=false;
+  renderCont();
+}
+function readContHealthReset(){
+  if(!cont.on&&cont.active) releaseContinuity();
+}
+/* ---------- the break video gets the same treatment ---------- */
+function contBreakTick(now){
+  if(!bPlayer) return;
+  let st=-1,t=0;
+  try{ st=bPlayer.getPlayerState(); t=bPlayer.getCurrentTime(); }catch(_){ return; }
+  if(t>cont.bLastT+0.02){ cont.bLastT=t; cont.bLastAdv=now; }
+  if(st===YT.PlayerState.PAUSED||st===-1){ cont.bLastAdv=now; return; }
+  const lt=loadedSecs(bPlayer,bDuration);
+  const head=(lt>t)?(lt-t):Infinity;
+  const stalled=(now-cont.bLastAdv)>cont.graceMs*1.5;
+  const preempt=cont.head>0&&isFinite(head)&&head<cont.head*0.75;
+  if((stalled||preempt)&&(now-cont.bLastSwitch)>6000){
+    const pool=bWarm.filter(s=>Math.abs(s.from-breakFrom)>0.6);
+    const w=pool.length?pool[pool.length-1]:null;
+    cont.bLastSwitch=now; cont.bLastAdv=now; cont.saves++;
+    if(w){
+      breakFrom=w.from; breakTo=w.to; breakStartedAt=Date.now();
+      try{ bPlayer.seekTo(w.from,true); bPlayer.playVideo(); }catch(_){}
+      toast('⚡ Break buffering — hopped to an already-watched break slice.');
+    }else{
+      try{ bPlayer.seekTo(breakFrom,true); bPlayer.playVideo(); }catch(_){}
+      breakStartedAt=Date.now();
+      toast('⚡ Break buffering — restarting this slice from its buffered head.');
+    }
+    renderCont();
+  }
+}
+
+/* ---------- rendering ---------- */
+function renderCont(){
+  const chip=$('cChip'); if(!chip) return;
+  const head=cont.headLast;
+  const healthy=isFinite(head)?Math.max(0,Math.min(100,head/8*100)):100;
+  cont.health=cont.active?0:healthy;
+  const bar=$('cBar'); if(bar) bar.style.width=Math.round(cont.health)+'%';
+  const headTxt=isFinite(head)?`${head.toFixed(1)}s buffered ahead`:'buffer unknown';
+  let label;
+  if(!cont.on) label='shield off';
+  else if(cont.active) label=`⚡ filler on #${cont.holdIdx+1} — card #${current?current.idx+1:'—'} frozen`;
+  else if(cont.viaBreak) label='⚡ break-video filler';
+  else if(cont.waiting) label='buffering — no warm segment yet';
+  else if(cont.probeUntil) label='probing the real segment…';
+  else label=isFinite(head)&&cont.head&&head<cont.head*1.5?'thin buffer':'healthy';
+  $('cLabel').textContent=label;
+  $('cDetail').textContent=` · ${headTxt} · warm ${cont.warm.size}/${cont.keep} · hops ${cont.hops} · saves ${cont.saves}`+
+    (cont.backoff?` · next retry in ${Math.max(0,Math.round((cont.retryAt-Date.now())/1000))}s (backoff ${Math.round(cont.backoff/1000)}s)`:'');
+  chip.textContent=cont.on?`shield on · warm ${cont.warm.size} · saves ${cont.saves}`:'shield off';
+  $('cState').textContent=cont.active?'filler playing':(cont.on?'armed':'off');
+  const badge=$('contBadge');
+  if(badge){
+    const show=cont.active||cont.waiting;
+    badge.classList.toggle('show',show);
+    if(show) $('contBadgeTxt').textContent=cont.active
+      ? `continuity · playing #${cont.holdIdx+1} while #${current?current.idx+1:'—'} buffers · retry ${Math.max(0,Math.round((cont.retryAt-Date.now())/1000))}s`
+      : 'buffering…';
+  }
+  const cl=$('contLine');
+  if(cl) cl.textContent=`continuity saves ${cont.saves} · warm ${cont.warm.size} · break slices cached ${bWarm.length}`;
+}
+
+/* ---------- wrappers ---------- */
+const _nlpCont=noteLoopPass;
+noteLoopPass=function(){                                  // a completed pass ⇒ that segment is decoded
+  if(current&&!cont.active) markWarm(current.idx);
+  return _nlpCont.apply(this,arguments);
+};
+
+const _gradeCont=grade;
+grade=function(kind,isAuto){
+  if(cont.active){                                        // grades are disabled, but keys/undo could sneak in
+    toast('Buffering — the shield is holding this card. Press Esc to force a retry.');
+    return;
+  }
+  if(current&&Q[kind]) markWarm(current.idx);
+  return _gradeCont.apply(this,arguments);
+};
+
+const _pcCont=playCurrent;
+playCurrent=function(){
+  if(cont.active){ cont.backoff=0; releaseContinuity(); return; }   // manual replay = force return
+  cont.lastT=-1; cont.lastAdv=Date.now();
+  return _pcCont.apply(this,arguments);
+};
+
+const _sbCont=startBreak;
+startBreak=function(){
+  cont.bLastT=-1; cont.bLastAdv=Date.now(); cont.bLastSwitch=0;
+  if(cont.active){ cont.backoff=0; releaseContinuity(); }
+  return _sbCont.apply(this,arguments);
+};
+
+const _ebCont=endBreak;
+endBreak=function(){
+  if(breakActive){
+    const secs=(Date.now()-breakStartedAt)/1000;
+    if(secs>=3&&breakTo-breakFrom>=2){                    // remember it as a warm break slice
+      bWarm.push({from:breakFrom,to:breakTo});
+      while(bWarm.length>cont.keep) bWarm.shift();
+    }
+  }
+  const out=_ebCont.apply(this,arguments);
+  cont.lastT=-1; cont.lastAdv=Date.now();
+  renderCont();
+  return out;
+};
+
+const _rqCont=renderQueue;
+renderQueue=function(){
+  const out=_rqCont.apply(this,arguments);
+  if(!cont.warm.size) return out;
+  document.querySelectorAll('#queue .qitem').forEach(el=>{
+    const idEl=el.querySelector('.id'); const tags=el.querySelector('.tags');
+    if(!idEl||!tags) return;
+    const n=parseInt(String(idEl.textContent).replace('#',''),10)-1;
+    if(cont.warm.has(n)){
+      const s=document.createElement('span');
+      s.className='pill warm';
+      s.title='warm — recently decoded, usable as continuity filler';
+      s.textContent='🔥';
+      tags.prepend(s);
+    }
+  });
+  return out;
+};
+
+const _srCont=sessionRecord;
+sessionRecord=function(){
+  const r=_srCont();
+  r.continuity={ on:cont.on, useBreak:cont.useBreak, shieldBreak:cont.shieldBreak,
+                 graceMs:cont.graceMs, head:cont.head, keep:cont.keep, holdMs:cont.holdMs,
+                 saves:cont.saves, hops:cont.hops };
+  return r;
+};
+function applySavedContState(s){
+  const c=s&&s.continuity; if(!c) return;
+  $('cOn').checked=c.on!==false;
+  $('cUseBreak').checked=c.useBreak!==false;
+  $('cBreakShield').checked=c.shieldBreak!==false;
+  if(c.graceMs) $('cGrace').value=String(Math.max(300,Math.min(3000,c.graceMs)));
+  if(c.head!=null) $('cHead').value=String(Math.max(0,Math.min(8,c.head)));
+  if(c.keep) $('cKeep').value=String(Math.max(2,Math.min(30,c.keep)));
+  if(c.holdMs) $('cHold').value=String(Math.max(3,Math.min(30,Math.round(c.holdMs/1000))));
+  cont.saves=c.saves||0; cont.hops=c.hops||0;
+  readContUI();
+}
+
+const _aupCont=applyUrlParams;
+applyUrlParams=function(){
+  const p=new URLSearchParams(location.search);
+  const h=new URLSearchParams((location.hash||'').replace(/^#/,''));
+  const g=k=>p.get(k)??h.get(k);
+  const on=v=>/^(1|true|yes|on)$/i.test(v);
+  const cs=g('cs')??g('shield'), cg=g('cgrace'), ch=g('chead'), cb=g('cbreak');
+  if(cs!==null&&cs!==undefined) $('cOn').checked=on(cs);
+  if(cg&&!isNaN(parseInt(cg)))   $('cGrace').value=String(Math.max(300,Math.min(3000,parseInt(cg))));
+  if(ch&&!isNaN(parseFloat(ch))) $('cHead').value=String(Math.max(0,Math.min(8,parseFloat(ch))));
+  if(cb!==null&&cb!==undefined)  $('cUseBreak').checked=on(cb);
+  readContUI();
+  return _aupCont.apply(this,arguments);
+};
+function contLinkParams(){
+  return `&cs=${cont.on?1:0}&cgrace=${cont.graceMs}&chead=${cont.head}&cbreak=${cont.useBreak?1:0}`;
+}
+
+/* ---------- continuity controls ---------- */
+['cOn','cUseBreak','cBreakShield'].forEach(id=>$(id).addEventListener('change',()=>{
+  readContUI();
+  if(id==='cOn') toast(cont.on?'⚡ Continuity shield armed.':'Continuity shield off — buffering will show normally.');
+  scheduleSave();
+}));
+['cGrace','cHead','cKeep','cHold'].forEach(id=>{
+  $(id).addEventListener('input',readContUI);
+  $(id).addEventListener('change',()=>{ readContUI(); scheduleSave(); });
+});
+document.addEventListener('keydown',e=>{
+  if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+  if(e.ctrlKey||e.metaKey||e.altKey) return;
+  if(e.key==='c'){ $('cOn').checked=!$('cOn').checked; $('cOn').dispatchEvent(new Event('change')); }
+  else if(e.key==='Escape'&&cont.active){ cont.backoff=0; probeReturn(); }
+});
+
+/* ---------- boot both layers ---------- */
+readContUI();
+contTimer=setInterval(contTick,200);
+idbOpen().then(()=>refreshLibrary()).catch(()=>{});
+setTimeout(()=>{ captureTitles(); refreshLibrary(); },2500);
+updateLibButtons();
 </script>
 </body>
 </html>
